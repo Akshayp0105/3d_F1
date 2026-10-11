@@ -16,6 +16,10 @@ export const transient = {
   rpm: 0,
   /** distance travelled (m), drives track scrolling */
   dist: 0,
+  /** car body roll (rad) on launch squat / brake dive */
+  roll: 0,
+  /** brake disc glow intensity during the run */
+  brake: 0,
   /** eased wheel speed when "Spin wheels" is on (rad/s) */
   spinSpeed: 0,
   /** DRS flap angle (rad, relative to closed) */
