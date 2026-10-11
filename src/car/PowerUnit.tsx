@@ -80,7 +80,7 @@ export function PowerUnit({ m }: { m: CarMaterials }) {
         mesh.receiveShadow = true
         const mat = mesh.material as THREE.MeshStandardMaterial
         if (name.startsWith('PU_Exhaust') && mat.name === 'Polished exhaust steel') mesh.material = m.inconel
-        else if (name === 'PU_MGUK') {
+        else if (name === 'PU_MGUK' && mat.name === 'Black anodised metal') {
           const own = (mesh.userData.own ??= mat.clone()) as THREE.MeshStandardMaterial
           own.emissive = new THREE.Color()
           mesh.material = own
@@ -106,7 +106,7 @@ export function PowerUnit({ m }: { m: CarMaterials }) {
     const ENG = transient.eng, RPM = transient.rpm
     const ea = ss(0.65, 1, transient.explode), act = Math.max(ea, ENG)
     const pulse = 0.25 + 1.4 * act * (0.5 + 0.5 * Math.sin(now * 0.005))
-    mgukMats.forEach(mat => { mat.emissiveIntensity = pulse * 0.35 })
+    mgukMats.forEach(mat => { mat.emissiveIntensity = pulse * 0.12 })
     bob.current.position.y = !reduceMotion ? 0.0025 * ea * Math.sin(now * 0.09) + 0.0012 * ENG * (0.4 + RPM) * Math.sin(now * 0.21) : 0
     m.exGlow.opacity = ENG * (0.3 + 0.7 * RPM)
     exGlow.current.scale.setScalar(1 + 1.5 * RPM * ENG)

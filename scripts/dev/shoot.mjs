@@ -43,9 +43,9 @@ if (want('engine')) {
   await wait(3200)
   await page.mouse.move(720, 450)
   await page.mouse.down({ button: 'right' })
-  await page.mouse.move(800, 490, { steps: 10 })
+  await page.mouse.move(800, 520, { steps: 10 })
   await page.mouse.up({ button: 'right' })
-  for (let i = 0; i < 9; i++) { await page.mouse.wheel(0, -120); await wait(50) }
+  for (let i = 0; i < 7; i++) { await page.mouse.wheel(0, -120); await wait(50) }
   await wait(2400)
   await shot('engine-side')
   await page.keyboard.press('1')
