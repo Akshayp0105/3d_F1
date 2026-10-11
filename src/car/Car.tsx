@@ -11,18 +11,16 @@ import { useStore } from '@/state/store'
 import { isCine } from '@/state/machine'
 import { transient } from '@/state/transient'
 import { ss, damp } from '@/lib/math'
-import { createCarMaterials, type CarMaterials } from '@/three/materials'
+import { createCarMaterials } from '@/three/materials'
 import { PowerUnit, Radiator } from './PowerUnit'
+import { FuelCell, Seat, DriverBody, SteeringWheel } from './Interior'
+import { WheelInternals, Caliper } from './WheelAssembly'
 import { PartDecals } from './Decals'
+import { carRefs } from './refs'
 
 export const CAR_URL = '/models/rb16b.glb'
 useGLTF.preload(CAR_URL)
 
-/** Shared refs for systems outside the car (tap raycast, label projection). */
-export const carRefs = {
-  car: null as THREE.Group | null,
-  parts: {} as Record<string, THREE.Group>,
-}
 
 interface PartObject {
   object: THREE.Object3D
@@ -41,23 +39,6 @@ function ExplodablePart({ name, def, children }: { name: string; def: PartDef; c
     ref.current.rotation.set(def.rot[0] * k, def.rot[1] * k, def.rot[2] * k)
   })
   return <group ref={ref}>{children}</group>
-}
-
-/** Glowing brake ring on the outboard wheel face (the STL's wheel covers are solid). */
-function BrakeGlow({ wheel, m }: { wheel: THREE.Object3D; m: CarMaterials }) {
-  const z = useMemo(() => {
-    const box = new THREE.Box3()
-    wheel.traverse(o => {
-      const g = (o as THREE.Mesh).geometry
-      if (g) { g.computeBoundingBox(); box.union(g.boundingBox!) }
-    })
-    return wheel.position.z > 0 ? box.max.z + 0.003 : box.min.z - 0.003
-  }, [wheel])
-  return (
-    <mesh material={m.brake} position={[0, 0, z]}>
-      <torusGeometry args={[0.16, 0.012, 8, 48]} />
-    </mesh>
-  )
 }
 
 export function Car() {
@@ -83,6 +64,8 @@ export function Car() {
         mesh.material = (m as unknown as Record<string, THREE.Material>)[key] ?? m.paint
         mesh.castShadow = true
         mesh.receiveShadow = true
+        // the STL's solid wheel disc is replaced by WheelInternals (spoked rim, hub, brake disc)
+        if (key === 'rim') mesh.visible = false
       })
       out[name] = { object: node, meshes }
     }
@@ -115,6 +98,7 @@ export function Car() {
     for (const w of WHEEL_NODES) { const o = parts[w]?.object; if (o) o.rotation.z -= wv * dt }
     // ×3 vs the prototype so the glow crosses the bloom threshold
     m.brake.emissiveIntensity = 3 * (cine ? transient.brake : (transient.spinSpeed / 22) * 1.6)
+    m.disc.emissiveIntensity = m.brake.emissiveIntensity
 
     // DRS flap
     const open = (cine && S > 0.9 && transient.cineT < T.decel) || toggles.drs
@@ -131,6 +115,10 @@ export function Car() {
 
   const extra: Record<string, ReactNode> = {
     PowerUnit: <PowerUnit m={m} />,
+    FuelCell: <FuelCell m={m} />,
+    SteeringWheel: <SteeringWheel m={m} />,
+    Chassis: <Seat m={m} />,
+    Driver: <DriverBody m={m} />,
     Radiator_R: <Radiator side={1} m={m} />,
     Radiator_L: <Radiator side={-1} m={m} />,
     RearWing: (
@@ -150,7 +138,8 @@ export function Car() {
         return (
           <ExplodablePart key={name} name={name} def={def}>
             {p && <primitive object={p.object} />}
-            {p && name.startsWith('Wheel_') && createPortal(<BrakeGlow wheel={p.object} m={m} />, p.object)}
+            {p && name.startsWith('Wheel_') && createPortal(<WheelInternals wheel={p.object} m={m} />, p.object)}
+            {p && name.startsWith('Wheel_') && <Caliper wheel={p.object} m={m} />}
             {extra[name]}
             {p && <PartDecals part={name} meshes={p.meshes} />}
           </ExplodablePart>
