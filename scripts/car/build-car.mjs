@@ -74,7 +74,7 @@ const material = name => {
 const stats = {}
 for (const [part, mats] of parts) {
   const pivot = pivotOf(part)
-  const mesh = doc.createMesh(part)
+  const mesh = doc.createMesh(`${part}_mesh`) // distinct from the node name: GLTFLoader uniquifies clashes
   let tris = 0
   for (const [mat, { p, q }] of mats) {
     const g = weld(p, q, pivot)

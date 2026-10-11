@@ -23,7 +23,7 @@ export function createCarMaterials() {
   }
 
   /** Livery paint: matte base, yellow nose tip, darker lower bodywork, dark inner faces on cut shells. */
-  const paint = new THREE.MeshPhysicalMaterial({ metalness: 0.18, roughness: 0.48, clearcoat: 0.25, clearcoatRoughness: 0.3, side: THREE.DoubleSide })
+  const paint = new THREE.MeshPhysicalMaterial({ metalness: 0.18, roughness: 0.48, clearcoat: 0.25, clearcoatRoughness: 0.3, envMapIntensity: 0.75, side: THREE.DoubleSide })
   paint.onBeforeCompile = sh => {
     Object.assign(sh.uniforms, { uBase: U.base, uAccent: U.accent, uAccent2: U.accent2 })
     OBJ_VARYINGS_VS(sh)
@@ -43,7 +43,7 @@ export function createCarMaterials() {
   }
 
   /** Bare carbon with a triplanar weave. */
-  const carbon = new THREE.MeshPhysicalMaterial({ color: 0xffffff, roughness: 0.38, metalness: 0.2, clearcoat: 0.7, clearcoatRoughness: 0.2, side: THREE.DoubleSide })
+  const carbon = new THREE.MeshPhysicalMaterial({ color: 0xffffff, roughness: 0.42, metalness: 0.15, clearcoat: 0.35, clearcoatRoughness: 0.25, envMapIntensity: 0.6, side: THREE.DoubleSide })
   carbon.onBeforeCompile = sh => {
     Object.assign(sh.uniforms, { uCarbon: U.carbon, uCarbonScale: U.carbonScale })
     OBJ_VARYINGS_VS(sh)
@@ -61,7 +61,7 @@ export function createCarMaterials() {
   }
 
   /** Tyre rubber with a red (soft compound) sidewall ring, in axle space. */
-  const tyre = new THREE.MeshStandardMaterial({ color: new THREE.Color('#141517'), roughness: 0.86, metalness: 0, side: THREE.DoubleSide })
+  const tyre = new THREE.MeshStandardMaterial({ color: new THREE.Color('#0b0c0d'), roughness: 0.9, metalness: 0, side: THREE.DoubleSide })
   tyre.onBeforeCompile = sh => {
     sh.uniforms.uRing = { value: new THREE.Color('#d8102b') }
     OBJ_VARYINGS_VS(sh)
@@ -109,7 +109,7 @@ export function createCarMaterials() {
   const radiator = new THREE.MeshStandardMaterial({ map: finTex(), roughness: 0.4, metalness: 0.8 })
   const rain = new THREE.MeshStandardMaterial({ color: new THREE.Color('#300'), emissive: new THREE.Color('#ff1e1e'), emissiveIntensity: 2 })
   const brake = new THREE.MeshStandardMaterial({ color: new THREE.Color('#2a2a2a'), emissive: new THREE.Color('#ff5a14'), emissiveIntensity: 0, roughness: 0.6, metalness: 0.6 })
-  const exGlow = new THREE.MeshBasicMaterial({ color: new THREE.Color('#ff7a2a'), transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false })
+  const exGlow = new THREE.MeshBasicMaterial({ color: new THREE.Color('#ff7a2a').multiplyScalar(2.2), transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false })
 
   const mats = { paint, carbon, tyre, rim, helmet, accentMat, accent2Mat, chrome, ti, alu, hv, mguk, radiator, rain, brake, exGlow }
 
