@@ -54,9 +54,31 @@ The licensed model is a 3D-print STL: one fused shell (~111k tris), no parts, no
    which breaks the car-space shader and decal projection. Don't use gltf-transform's `meshopt()`: it force-quantizes positions.
    Mesh names are `${part}_mesh`, because GLTFLoader uniquifies node/mesh name clashes.
 
-Parts: `Chassis, FrontWing (incl. nose), Halo, Driver, Sidepod_L/R, EngineCover, Floor, RearWing (incl. beam wing,
-diffuser, crash structure), RearWing_Flap, Wheel_FL/FR/RL/RR`. Procedural extras live in code: `PowerUnit`
-(prototype puG, inside the engine bay, with the exhaust routed to the STL exit at (−1.97, 0.41, 0)), `Radiator_L/R`, rain light, brake glow rings.
+Parts: `Chassis (front monocoque), FrontWing (incl. nose), Halo, Driver, Sidepod_L/R, EngineCover, Floor, Gearbox
+(casing + rear suspension, x < −1.3), RearWing (incl. beam wing, diffuser, crash structure), RearWing_Flap, Wheel_FL/FR/RL/RR`.
+
+## Interior (procedural, fills what the STL shell lacks)
+
+Cavity sizes come from `scripts/car/probe-interior.mjs`. The shell is empty between the cockpit bulkhead (x 0.03) and the gearbox (x −1.35).
+- `car/PowerUnit.tsx`: 90° V6 in the bay. Crankcase; banks built as extruded deck plates with **real bores**, so the pistons
+  are visible pumping once the heads lift. Heads, cam covers and coil packs. Carbon plenum + airbox duct. Split turbo (front compressor
+  with a spinning impeller, MGU-H on the shaft, rear turbine). Iridescent heat-tinted Inconel headers / tailpipe / wastegates. MGU-K + HV cables.
+  Each sub-assembly is a `Stage` with its own explode window (d 0.60–0.78, 0.2 wide), so the engine comes apart after the PU lifts.
+  Stages register in `carRefs.parts` (`PU_Turbine`, `PU_MGUK`, …) so labels can anchor to them.
+- `car/Interior.tsx`: `FuelCell` (bladder, energy store with HV band, rear bulkhead), `Seat`, `DriverBody` (suit, HANS, gloves),
+  `SteeringWheel` (live canvas dash: rev LEDs, gear, speed from `transient`).
+- `car/WheelAssembly.tsx`: the STL's solid wheel discs (`rim` primitive) are hidden. Instead: spoked 13" rim, hub, centre-lock nut,
+  carbon brake disc (emissive under braking) spinning with the wheel, plus a static caliper on the upright.
+- Inner faces of cut paint panels render as triplanar carbon (paint shader, `!gl_FrontFacing`).
+- Exploded view pulls the camera back/up (`ORBIT.explodedPhi/explodedR`) and restores it on reassembly.
+
+## Race track (`scene/RaceTrack.tsx`)
+
+Night street circuit, faded in by `m`:
+- **Static backdrops:** sky dome shader (horizon glow + stars, horizon = `NIGHT.bg` = fog colour) and a skyline cylinder (canvas silhouettes, lit windows, aviation lights).
+- **Scrolling on a 300 m loop by `dist`:** asphalt (racing line, kerbs), barriers with LED ad boards (logos, `adBoardTexture`), catch fence,
+  instanced floodlight gantries, 6 grandstands with instanced crowd (bodies + heads), an overhead Red Bull bridge, speed streaks.
+- Night fog: near 40 / far 210. `Stage.tsx` now only does the studio floor + background/fog mix.
 
 To tune a cut, edit thresholds in `segment.mjs`, run `npm run build:car`, then `npm run shots`.
 
@@ -70,9 +92,10 @@ To tune a cut, edit thresholds in `segment.mjs`, run `npm run build:car`, then `
 | Canvas textures | 244–275, 607–618 | `three/textures.ts` (+ `svgTexture` for brand logos) |
 | Livery shader + materials | 277–311 | `three/materials.ts`. No UVs, so livery zones (yellow nose, dark lower body, dark inner faces) and a **triplanar** carbon weave come from object-space position/normal. Tyres get a red sidewall band in axle space |
 | Car part groups `part(off,d,rot)` | 401–592 | GLB nodes + `config/parts.ts` (offsets, delays, rotations, labels) + `car/Car.tsx` `ExplodablePart` |
-| Power unit + animation | 489–510, 910–917 | `car/PowerUnit.tsx` |
+| Power unit + animation | 489–510, 910–917 | `car/PowerUnit.tsx` (rebuilt as a detailed V6 with staged sub-explode) |
 | Decals | 391–398 | `car/Decals.tsx` (drei `<Decal>` projection) + `config/decals.ts` (placements from `probe.mjs`) |
-| Studio floor, track, posts, streaks, `applyMix` | 594–637, 656–667, 924–931 | `scene/Stage.tsx` (+ Red Bull floor emblem) |
+| Studio floor, `applyMix` | 594–604, 656–667 | `scene/Stage.tsx` (+ Red Bull floor emblem) |
+| Track, posts, walls, streaks | 606–637, 924–931 | `scene/RaceTrack.tsx` (full night-circuit environment) |
 | Orbit camera, fit, views, tap / double-tap, wheel, pinch | 700–750, 885–892 | `scene/CameraRig.tsx` (`rig` shared object; + pan: right-drag / shift-drag / two-finger) |
 | Keyboard | 757–767 | `hooks/useKeyboard.ts` |
 | Engine synth | 769–800 | `audio/engine.ts` (sample layers when `public/audio/*` exist, synth fallback) |
