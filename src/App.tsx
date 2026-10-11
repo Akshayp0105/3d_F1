@@ -19,6 +19,7 @@ export default function App() {
           dpr={[1, 2]}
           gl={{ antialias: false, powerPreference: 'high-performance', toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.08 }}
           camera={{ fov: 32, near: 0.05, far: 240, position: [-8, 5, 10] }}
+          onCreated={({ gl }) => { if (import.meta.env.DEV) (window as unknown as { __gl: THREE.WebGLRenderer }).__gl = gl }}
           fallback={<div id="err"><p>This view needs WebGL. Try a recent version of Chrome, Safari, Edge or Firefox.</p></div>}
         >
           <Experience />

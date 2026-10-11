@@ -145,7 +145,14 @@ function Loader() {
     const ready = document.fonts?.load ? Promise.all([document.fonts.load('italic 800 40px "Barlow Condensed"'), document.fonts.ready]) : Promise.resolve()
     Promise.race([ready, new Promise(r => setTimeout(r, 1800))]).then(() => setFontsReady(true), () => setFontsReady(true))
   }, [])
-  const done = fontsReady && !active && progress >= 100
+  // wait for the shader warm-up (scene/Warmup.tsx) so the first launch doesn't stall on shader compiles
+  const [warmed, setWarmed] = useState(false)
+  useEffect(() => {
+    if (warmed) return
+    const id = setInterval(() => transient.ready && setWarmed(true), 100)
+    return () => clearInterval(id)
+  }, [warmed])
+  const done = fontsReady && !active && progress >= 100 && warmed
   return (
     <div id="loader" className={done ? 'done' : ''}>
       <span>{active ? `Building the chassis… ${Math.round(progress)}%` : 'Building the chassis…'}</span>

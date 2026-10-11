@@ -1,5 +1,9 @@
 // Per-frame values shared between scene components. Mutated in useFrame / GSAP, never React state.
 export const transient = {
+  /** shader warm-up (scene/Warmup.tsx): when > 0 forces studio→track mix = warm (and speed 1) for hidden frames */
+  warm: 0,
+  /** warm-up finished; the loader waits for this */
+  ready: false,
   /** 0..1 explode progress (prototype exT), tweened by GSAP at 1/1.9 per second */
   explode: 0,
   /** cinematic clock (s); only meaningful while phase is cinematic/returning */
