@@ -162,3 +162,25 @@ The AudioContext unlocks inside the launch gesture (`state/actions.ts`).
 - Official livery colours, the ORACLE wordmark, other approved sponsor files, licensed engine audio samples.
 - Perf: the three bundle is ~1.47 MB (code-split later); the GLB is 1.85 MB before HTTP compression.
 - Possible next premium steps: reflective floor (MeshReflectorMaterial), staged engine-reveal sub-steps, mobile tuning.
+
+## Realism pass 3 (pistons, exterior, studio, performance)
+
+- **Pistons** (`car/Pistons.tsx`): `build-engine.mjs` drops the engine model's solid cylinder barrels and records each
+  bore's top/axis/length/radius (principal-axis fit, car space) in the `Engine` node extras. At runtime each bore is an
+  open liner with a piston on a true slider-crank (rod/crank 3.3) in V6 firing order (1-4-2-5-3-6, 120°). It turns
+  slowly once the heads lift in the exploded view and at engine rpm while running.
+- **Exterior:** sponsor wordmarks from the supplied Oracle model (`scripts/car/extract-decals.mjs` → `public/brand/*.png`)
+  are projected via `config/decals.ts`: Oracle (sidepods, rear-wing top), TAG Heuer (nose), Mobil 1, Bybit (floor edge), Ford
+  (rear endplates) and Pirelli P Zero on every tyre sidewall (`TyreDecals`, spins with the wheel). N8AO ambient occlusion.
+- **Studio** (`scene/Showroom.tsx`): reflective turntable (drei `MeshReflectorMaterial`), cyclorama gradient wall, two curved
+  team LED walls (texture U mirrored, since they're viewed from inside), vertical light strips (also added as environment
+  Lightformers, so they reflect on the paint), overhead truss + softboxes, a volumetric spotlight.
+  `scene.environmentIntensity` drops to 0.28 at night.
+- **Race sky:** fbm night clouds lit by the city, plus a second, nearer skyline ring for depth.
+- **Performance rules (measured with `scripts/dev/fps.mjs`, `scripts/dev/stalls.mjs`):**
+  - Never add or remove lights at runtime (light count is in the shader key, so every shader recompiles). Fade intensity instead.
+  - Toggling `material.transparent` also recompiles (`opaque` is in the key).
+  - drei's reflector re-renders the whole scene every frame even when hidden, so it is only mounted outside the launch sequence.
+  - `scene/Warmup.tsx`: after load and behind the loader, renders the race state (mix 1, then 0.5) and runs `gl.compile`.
+    The loader waits for `transient.ready`. Result: race went from 5 fps (multi-second compile stalls) to 144 fps.
+  - Dev builds expose the renderer as `window.__gl` for these scripts.
