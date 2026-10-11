@@ -1,7 +1,9 @@
 # Brand assets — request list for Red Bull's brand team
 
-Drop the **official** files here, using the filenames below. The code reads `manifest.json`.
-A missing file renders a grey placeholder plate, so nothing breaks while assets are pending.
+Drop the **official** files here. Where each logo goes on the car is configured in `src/config/decals.ts`
+(add a sponsor = add its file here + one entry there). A missing file just skips that decal.
+
+**Received so far:** `redbull-logo.svg` (bulls + sun + wordmark), `oracle-mark.svg` (Oracle ring only; the ORACLE wordmark is still needed).
 
 Format: SVG preferred. Otherwise PNG with transparent background, at least 4096 px on the long edge.
 
