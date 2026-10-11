@@ -69,6 +69,8 @@ export function Stage({ theme }: { theme: ThemeName }) {
     fog.near = lerp(14, 40, M)
     fog.far = lerp(40, 210, M)
     r.floorMat.color.copy(themeFloor).lerp(nightFloor, M)
+    // the studio environment reflections don't belong on a night street circuit
+    scene.environmentIntensity = lerp(1, 0.28, M)
     r.discMat.opacity = 1 - M
     r.ringMat.opacity = 1 - M
     r.ring2Mat.opacity = 0.25 * (1 - M)

@@ -48,6 +48,11 @@ export function StudioEnvironment({ theme }: { theme: ThemeName }) {
       {PANELS.map(([w, h, color, intensity, pos], i) => (
         <Lightformer key={i} form="rect" scale={[w, h, 1]} color={color} intensity={intensity} position={pos} target={[0, 0, 0]} />
       ))}
+      {/* the showroom's vertical wall strips, so they show up as reflections on the paint */}
+      {Array.from({ length: 8 }, (_, i) => {
+        const a = (i / 8) * Math.PI * 2 + 0.2
+        return <Lightformer key={`s${i}`} form="rect" scale={[0.25, 6, 1]} intensity={2.2} color="#dfe8ff" position={[Math.cos(a) * 12, 3.4, Math.sin(a) * 12]} target={[0, 1, 0]} />
+      })}
     </Environment>
   )
 }

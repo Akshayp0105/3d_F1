@@ -4,6 +4,7 @@ import { Car } from '@/car/Car'
 import { Lighting, StudioEnvironment } from './Lighting'
 import { Stage } from './Stage'
 import { RaceTrack } from './RaceTrack'
+import { Showroom } from './Showroom'
 import { CameraRig } from './CameraRig'
 import { Effects } from './Effects'
 import { ExplodeDriver, LabelProjector } from './SceneSystems'
@@ -19,6 +20,7 @@ export function Experience() {
       <Lighting />
       <StudioEnvironment theme={theme} />
       <Stage theme={theme} />
+      <Showroom theme={theme} />
       <RaceTrack />
       <Suspense fallback={null}>
         <Car />

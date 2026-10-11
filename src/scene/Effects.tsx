@@ -2,7 +2,7 @@
 // speed-driven chromatic aberration during the run, vignette (replaces the CSS overlay), ACES tone mapping.
 import { useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
-import { EffectComposer, Bloom, ChromaticAberration, Vignette, ToneMapping } from '@react-three/postprocessing'
+import { EffectComposer, N8AO, Bloom, ChromaticAberration, Vignette, ToneMapping } from '@react-three/postprocessing'
 import { ToneMappingMode, BlendFunction, type ChromaticAberrationEffect } from 'postprocessing'
 import * as THREE from 'three'
 import { useStore } from '@/state/store'
@@ -20,6 +20,8 @@ export function Effects() {
   })
   return (
     <EffectComposer multisampling={4}>
+      {/* ambient occlusion: contact darkening under the car, in panel joints, wheel wells, engine bay */}
+      <N8AO halfRes aoRadius={0.55} distanceFalloff={0.8} intensity={2.4} color="black" />
       <Bloom mipmapBlur luminanceThreshold={1.6} luminanceSmoothing={0.3} intensity={0.8} />
       <ChromaticAberration ref={ca} offset={offset} radialModulation modulationOffset={0.25} blendFunction={BlendFunction.NORMAL} />
       <Vignette offset={0.32} darkness={0.55} />
