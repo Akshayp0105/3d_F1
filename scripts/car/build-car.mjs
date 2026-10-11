@@ -6,7 +6,7 @@
 import path from 'node:path'
 import { Document, NodeIO } from '@gltf-transform/core'
 import { EXTMeshoptCompression, KHRMeshQuantization } from '@gltf-transform/extensions'
-import { meshopt, reorder, quantize } from '@gltf-transform/functions'
+import { reorder, quantize } from '@gltf-transform/functions'
 import { MeshoptEncoder } from 'meshoptimizer'
 import { loadSTL, smoothNormals, clipToPlanes, partOf, materialOf, WHEELS, FLAP_HINGE } from './segment.mjs'
 
@@ -92,14 +92,14 @@ for (const [part, mats] of parts) {
 }
 
 await MeshoptEncoder.ready
+// Not using meshopt(): it force-quantizes POSITION, which adds node transforms and breaks the car-space
+// livery shader and decal projection. Positions stay float; normals are quantized; meshopt still compresses.
 await doc.transform(
-  reorder({ encoder: MeshoptEncoder }),
-  // positions stay float: quantization adds node transforms, which would break the car-space livery shader
+  reorder({ encoder: MeshoptEncoder, target: 'size' }),
   quantize({ pattern: /^NORMAL$/, quantizeNormal: 10 }),
-  meshopt({ encoder: MeshoptEncoder, level: 'medium' }),
 )
-doc.createExtension(KHRMeshQuantization).setRequired(true)
 doc.createExtension(EXTMeshoptCompression).setRequired(true)
+  .setEncoderOptions({ method: EXTMeshoptCompression.EncoderMethod.QUANTIZE })
 
 const io = new NodeIO().registerExtensions([EXTMeshoptCompression, KHRMeshQuantization]).registerDependencies({ 'meshopt.encoder': MeshoptEncoder })
 await io.write(outFile, doc)
