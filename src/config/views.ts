@@ -21,4 +21,7 @@ export const ORBIT = {
   autoDelayMs: 2500,
   /** pan limits around the target (improvement over the prototype, which had no pan) */
   panMax: 2.2,
+  /** exploded view pulls the camera back and up to an assembly-diagram angle (min phi / min r × fit) */
+  explodedPhi: 0.52,
+  explodedR: 9.6,
 }

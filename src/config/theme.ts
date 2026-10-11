@@ -6,7 +6,8 @@ export const THEMES = {
   dark: { scene: '#0e1116', floor: '#0c0e12', disc: '#13161c', shadow: 0.75, emblem: 0.7 },
 } as const
 export type ThemeName = keyof typeof THEMES
-export const NIGHT = { bg: '#07090c', floor: '#0a0c0f' }
+/** night-race horizon (fog + sky dome horizon match so distant geometry melts into the sky) */
+export const NIGHT = { bg: '#141b2c', floor: '#0b0d11' }
 
 const query = () => matchMedia('(prefers-color-scheme: dark)')
 

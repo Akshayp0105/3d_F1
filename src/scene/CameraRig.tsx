@@ -7,7 +7,7 @@ import { VIEWS, ORBIT, ORBIT_TARGET } from '@/config/views'
 import { useStore } from '@/state/store'
 import { isCine } from '@/state/machine'
 import { clamp, damp } from '@/lib/math'
-import { carRefs } from '@/car/Car'
+import { carRefs } from '@/car/refs'
 import { launch } from '@/state/actions'
 
 const DEG = Math.PI / 180
@@ -86,6 +86,23 @@ export function CameraRig() {
       }),
     [],
   )
+
+  // exploded view: pull back + up so every part is readable; restore when reassembled
+  useEffect(() => {
+    let saved: { phi: number; r: number } | null = null
+    return useStore.subscribe((s, prev) => {
+      if (s.phase === prev.phase) return
+      if (s.phase === 'exploded') {
+        saved = { phi: rig.want.phi, r: rig.want.r }
+        rig.want.phi = Math.max(rig.want.phi, ORBIT.explodedPhi)
+        rig.want.r = Math.max(rig.want.r, ORBIT.explodedR * rig.fit)
+      } else if (prev.phase === 'exploded' && s.phase === 'idle' && saved) {
+        rig.want.phi = saved.phi
+        rig.want.r = saved.r
+        saved = null
+      }
+    })
+  }, [])
 
   // pointer input
   useEffect(() => {

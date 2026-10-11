@@ -7,7 +7,7 @@ import { LABELS } from '@/config/parts'
 import { useStore } from '@/state/store'
 import { isCine } from '@/state/machine'
 import { transient } from '@/state/transient'
-import { carRefs } from '@/car/Car'
+import { carRefs } from '@/car/refs'
 
 /** Explode progress: linear at 1/1.9 per second toward the phase's target, reversible mid-flight
  *  (prototype line 896, now a GSAP tween whose duration is proportional to the remaining distance). */
