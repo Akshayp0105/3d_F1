@@ -50,6 +50,38 @@ const pivotOf = part => {
   return [0, 0, 0]
 }
 
+// Front wheels = the rear wheels, re-sized. Cutting the front wheels out of the fused STL also cuts out
+// non-round bits of the front upright/brake duct that sit inside the wheel; they spin with it and make the
+// front wheels look loose and wiggly. The rear wheels cut cleanly, so each front wheel is replaced by the rear
+// wheel of the same side, scaled to the front tyre's diameter and width and centred on the front axle.
+const pivots = Object.fromEntries(Object.keys(WHEELS).map(w => [w, pivotOf(w)]))
+const tyreSize = w => {
+  const p = parts.get(w).get('tyre').p
+  let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity
+  for (let k = 0; k < p.length; k += 3) { x0 = Math.min(x0, p[k]); x1 = Math.max(x1, p[k]); z0 = Math.min(z0, p[k + 2]); z1 = Math.max(z1, p[k + 2]) }
+  return { dia: x1 - x0, width: z1 - z0, cz: (z0 + z1) / 2 }
+}
+for (const [front, rear] of [['Wheel_FL', 'Wheel_RL'], ['Wheel_FR', 'Wheel_RR']]) {
+  const f = tyreSize(front), r = tyreSize(rear)
+  const s = [f.dia / r.dia, f.dia / r.dia, f.width / r.width]
+  // align on the tyres' own z-centres (the old front extent included the upright bits)
+  const pr = [pivots[rear][0], pivots[rear][1], r.cz]
+  const pf = (pivots[front] = [pivots[front][0], pivots[front][1], f.cz])
+  const mats = new Map()
+  for (const [mat, { p, q }] of parts.get(rear)) {
+    const np = new Array(p.length), nq = new Array(q.length)
+    for (let k = 0; k < p.length; k += 3) {
+      for (let a = 0; a < 3; a++) np[k + a] = (p[k + a] - pr[a]) * s[a] + pf[a]
+      // normals under non-uniform scale: divide by the scale, renormalise
+      const nx = q[k] / s[0], ny = q[k + 1] / s[1], nz = q[k + 2] / s[2], l = Math.hypot(nx, ny, nz) || 1
+      nq[k] = nx / l; nq[k + 1] = ny / l; nq[k + 2] = nz / l
+    }
+    mats.set(mat, { p: np, q: nq })
+  }
+  parts.set(front, mats)
+  console.log(front, `← ${rear} scaled`, s.map(v => v.toFixed(3)).join(' × '), `(front tyre Ø ${f.dia.toFixed(3)} w ${f.width.toFixed(3)}, rear Ø ${r.dia.toFixed(3)} w ${r.width.toFixed(3)})`)
+}
+
 // weld a non-indexed buffer into indexed position/normal arrays
 function weld(p, q, pivot) {
   const map = new Map(), pos = [], nor = [], idx = []
@@ -79,7 +111,7 @@ const material = name => {
 
 const stats = {}
 for (const [part, mats] of parts) {
-  const pivot = pivotOf(part)
+  const pivot = pivots[part] ?? pivotOf(part)
   const mesh = doc.createMesh(`${part}_mesh`) // distinct from the node name: GLTFLoader uniquifies clashes
   let tris = 0
   for (const [mat, { p, q }] of mats) {
