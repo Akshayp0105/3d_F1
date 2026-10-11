@@ -52,7 +52,10 @@ The licensed model is a 3D-print STL: one fused shell (~111k tris), no parts, no
 5. **Write** one node per part with one primitive per material. Body parts stay in **car space** (node at origin), exactly
    like the prototype's part groups, so the explode maths and the object-space livery shader work unchanged.
    Wheels get axle pivots (spin on local Z), computed per wheel from the **tyre's own bounding box**. A hand-measured
-   centre put the front wheels 13–15 mm off-axis, so they wobbled like loose wheels. Each tyre is round within ±1.5 mm around its pivot. `RearWing_Flap` gets its hinge pivot (DRS rotates on local Z).
+   centre put the front wheels 13–15 mm off-axis, so they wobbled like loose wheels. Each tyre is round within ±1.5 mm around its pivot.
+   **Front wheels are copies of the rear wheels** (same side, scaled to the front tyre's diameter/width, centred on
+   the front tyre). Cutting the fronts out of the fused STL also cut non-round upright/brake-duct pieces that spun with
+   the wheel and looked loose. Verify with `node scripts/car/check-wheels.mjs` (fronts must match rears). `RearWing_Flap` gets its hinge pivot (DRS rotates on local Z).
 6. **Compress**: meshopt + quantized normals. Positions stay **float**, because quantizing them adds node transforms,
    which breaks the car-space shader and decal projection. Don't use gltf-transform's `meshopt()`: it force-quantizes positions.
    Mesh names are `${part}_mesh`, because GLTFLoader uniquifies node/mesh name clashes.
