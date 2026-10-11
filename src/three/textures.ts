@@ -213,7 +213,7 @@ export function fenceTexture() {
 }
 
 /** Distant city skyline wrapped on a cylinder: silhouettes, lit windows, aviation lights, horizon haze. */
-export function skylineTexture() {
+export function skylineTexture({ near = false } = {}) {
   const W = 4096, H = 512
   const [c, g] = canvas(W, H)
   g.clearRect(0, 0, W, H)
@@ -237,8 +237,13 @@ export function skylineTexture() {
       x += w + Math.random() * count
     }
   }
-  layer(40, 60, 220, 14, 0.5)
-  layer(10, 40, 420, 20, 0.85)
+  if (near) {
+    // nearer ring: lower, darker blocks with sparse warm windows (depth layer in front of the far skyline)
+    layer(6, 50, 200, 8, 0.6)
+  } else {
+    layer(40, 60, 220, 14, 0.5)
+    layer(10, 40, 420, 20, 0.85)
+  }
   g.fillStyle = haze
   g.fillRect(0, H - 200, W, 200)
   const t = new THREE.CanvasTexture(c)

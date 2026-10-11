@@ -26,11 +26,15 @@ function skyMaterial() {
     depthWrite: false,
     transparent: true,
     fog: false,
-    uniforms: { uOpacity: { value: 0 }, uHorizon: { value: new THREE.Color(NIGHT.bg) }, uGlow: { value: new THREE.Color('#3a2a2a') }, uZenith: { value: new THREE.Color('#020308') } },
+    uniforms: { uTime: { value: 0 }, uOpacity: { value: 0 }, uHorizon: { value: new THREE.Color(NIGHT.bg) }, uGlow: { value: new THREE.Color('#3a2a2a') }, uZenith: { value: new THREE.Color('#020308') } },
     vertexShader: 'varying vec3 vDir; void main(){ vDir = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
     fragmentShader: `
-      uniform float uOpacity; uniform vec3 uHorizon; uniform vec3 uGlow; uniform vec3 uZenith; varying vec3 vDir;
+      uniform float uOpacity; uniform vec3 uHorizon; uniform vec3 uGlow; uniform vec3 uZenith; uniform float uTime; varying vec3 vDir;
       float hash(vec3 p){ return fract(sin(dot(p, vec3(12.9898,78.233,45.164))) * 43758.5453); }
+      float h2(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+      float noise(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+        return mix(mix(h2(i), h2(i + vec2(1, 0)), f.x), mix(h2(i + vec2(0, 1)), h2(i + vec2(1, 1)), f.x), f.y); }
+      float fbm(vec2 p){ float v = 0.0, a = 0.5; for (int k = 0; k < 5; k++) { v += a * noise(p); p *= 2.03; a *= 0.5; } return v; }
       void main(){
         float h = vDir.y;
         vec3 col = mix(uHorizon, uZenith, smoothstep(0.0, 0.55, h));
@@ -38,7 +42,12 @@ function skyMaterial() {
         if (h < 0.0) col = uHorizon * 0.6;
         vec3 cell = floor(vDir * 420.0);
         float star = step(0.9985, hash(cell)) * smoothstep(0.08, 0.4, h);
-        col += vec3(star) * 0.6;
+        // night clouds: drifting fbm layer, lit warm from below by the city, thinning toward the zenith
+        vec2 cp = vDir.xz / max(h + 0.12, 0.05) * 1.6 + vec2(uTime * 0.01, uTime * 0.004);
+        float cloud = smoothstep(0.48, 0.82, fbm(cp)) * smoothstep(0.02, 0.12, h) * (1.0 - smoothstep(0.35, 0.8, h));
+        vec3 cloudCol = mix(vec3(0.16, 0.11, 0.1), vec3(0.06, 0.07, 0.1), smoothstep(0.05, 0.4, h));
+        col = mix(col, cloudCol, cloud * 0.85);
+        col += vec3(star) * 0.6 * (1.0 - cloud);
         gl_FragColor = vec4(col, uOpacity);
         #include <colorspace_fragment>
       }`,
@@ -62,6 +71,8 @@ export function RaceTrack() {
     const asphalt = asphaltTexture(gl.capabilities.getMaxAnisotropy())
     const fence = fenceTexture()
     const skyline = skylineTexture()
+    const skylineNear = skylineTexture({ near: true })
+    skylineNear.repeat.set(4, 1)
     const mats = {
       track: add(new THREE.MeshStandardMaterial({ map: asphalt, color: new THREE.Color(0.46, 0.46, 0.48), roughness: 0.86, metalness: 0, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 })),
       wall: add(new THREE.MeshStandardMaterial({ color: new THREE.Color('#8a8f96'), roughness: 0.9 })),
@@ -78,6 +89,7 @@ export function RaceTrack() {
       crowd: add(new THREE.MeshStandardMaterial({ roughness: 0.9, envMapIntensity: 0.4 })),
       banner: add(new THREE.MeshStandardMaterial({ roughness: 0.5, emissive: new THREE.Color('#ffffff'), emissiveIntensity: 0.8 })),
       skyline: add(new THREE.MeshBasicMaterial({ map: skyline, side: THREE.BackSide, fog: false, depthWrite: false }), true),
+      skylineNear: add(new THREE.MeshBasicMaterial({ map: skylineNear, side: THREE.BackSide, fog: false, depthWrite: false }), true),
       streak: new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }),
     }
     const sky = skyMaterial()
@@ -199,6 +211,7 @@ export function RaceTrack() {
       m.transparent = m.userData.keepTransparent || M < 0.999
     }
     r.sky.uniforms.uOpacity.value = M
+    r.sky.uniforms.uTime.value += 0.016
 
     // scrolling textures
     r.asphalt.offset.x = (dist / 8) % 1
@@ -238,6 +251,9 @@ export function RaceTrack() {
         </mesh>
         <mesh material={m.skyline} position-y={28} renderOrder={-1} frustumCulled={false}>
           <cylinderGeometry args={[165, 165, 64, 96, 1, true]} />
+        </mesh>
+        <mesh material={m.skylineNear} position-y={17} rotation-y={0.9} renderOrder={-1} frustumCulled={false}>
+          <cylinderGeometry args={[118, 118, 38, 96, 1, true]} />
         </mesh>
       </group>
 
