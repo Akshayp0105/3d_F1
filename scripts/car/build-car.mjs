@@ -35,10 +35,16 @@ for (let t = 0; t < n; t++) {
 // pivots
 const pivotOf = part => {
   if (WHEELS[part]) {
-    // axle centre: x/y from config, z = centre of the wheel's own extent
+    // Spin pivot = centre of the tyre's own bounding box (x, y) and of the whole wheel (z). Using a hand-measured
+    // centre made the front wheels wobble ~13 mm off-axis ("loose wheel").
     let z0 = Infinity, z1 = -Infinity
     for (const { p } of parts.get(part).values()) for (let k = 2; k < p.length; k += 3) { z0 = Math.min(z0, p[k]); z1 = Math.max(z1, p[k]) }
-    return [WHEELS[part].c[0], WHEELS[part].c[1], (z0 + z1) / 2]
+    const tyre = parts.get(part).get('tyre').p
+    let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity
+    for (let k = 0; k < tyre.length; k += 3) { x0 = Math.min(x0, tyre[k]); x1 = Math.max(x1, tyre[k]); y0 = Math.min(y0, tyre[k + 1]); y1 = Math.max(y1, tyre[k + 1]) }
+    const pivot = [(x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2]
+    console.log(part, 'pivot', pivot.map(v => v.toFixed(4)).join(', '), `tyre Ø x ${(x1 - x0).toFixed(4)} y ${(y1 - y0).toFixed(4)}`)
+    return pivot
   }
   if (part === 'RearWing_Flap') return FLAP_HINGE
   return [0, 0, 0]

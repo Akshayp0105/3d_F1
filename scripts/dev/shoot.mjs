@@ -35,6 +35,28 @@ if (want('exploded')) {
   await page.keyboard.press('e')
   await wait(2500)
 }
+if (want('engine')) {
+  // exploded side view, pan the engine to the centre (right-drag) and zoom in
+  await page.keyboard.press('e')
+  await page.waitForTimeout(400)
+  await page.keyboard.press('3')
+  await wait(3200)
+  await page.mouse.move(720, 450)
+  await page.mouse.down({ button: 'right' })
+  await page.mouse.move(800, 490, { steps: 10 })
+  await page.mouse.up({ button: 'right' })
+  for (let i = 0; i < 9; i++) { await page.mouse.wheel(0, -120); await wait(50) }
+  await wait(2400)
+  await shot('engine-side')
+  await page.keyboard.press('1')
+  await wait(400)
+  await page.mouse.move(720, 450)
+  for (let i = 0; i < 5; i++) { await page.mouse.wheel(0, -120); await wait(50) }
+  await wait(2400)
+  await shot('engine-34')
+  await page.keyboard.press('e')
+  await wait(2500)
+}
 if (want('views')) {
   for (const [k, n] of [['2', 'front'], ['3', 'side'], ['4', 'rear'], ['5', 'top'], ['6', 'low'], ['1', 'three-quarter']]) {
     await page.keyboard.press(k)

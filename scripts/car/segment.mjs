@@ -7,9 +7,11 @@ export const STL_TO_WORLD = { scale: 3.6 / 126.3, xc: 155.0, ym: 163.05 }
 
 export const FLAP_HINGE = [-2.185, 0.9, 0]
 
+// c = classification centre (from scripts/car/fit-wheels.mjs); r is generous so no tread falls outside the wheel.
+// The spin pivot itself is computed per wheel from its tyre geometry in build-car.mjs.
 export const WHEELS = {
-  Wheel_FL: { c: [1.806, 0.349], r: 0.36, zMin: 0.585, side: -1 },
-  Wheel_FR: { c: [1.806, 0.349], r: 0.36, zMin: 0.585, side: 1 },
+  Wheel_FL: { c: [1.8135, 0.3643], r: 0.375, zMin: 0.585, side: -1 },
+  Wheel_FR: { c: [1.8069, 0.3643], r: 0.375, zMin: 0.585, side: 1 },
   Wheel_RL: { c: [-1.799, 0.331], r: 0.345, zMin: 0.548, side: -1 },
   Wheel_RR: { c: [-1.799, 0.331], r: 0.345, zMin: 0.548, side: 1 },
 }
@@ -79,6 +81,8 @@ const C = {
   // floor has rake: plane y = floorY0 - floorK * x
   floorY0: 0.17, floorK: 0.025, floorX1: 1.35,
   podZ: 0.27, podX1: 0.95, podX0: -1.6,
+  // gearbox casing + rear suspension: what remains of the chassis behind the engine bay
+  gbX: -1.3,
 }
 // Planes as [nx, ny, nz, c, region]: signed distance = n·p - c. A plane only splits triangles whose
 // bounding box overlaps its region box [[x0,y0,z0],[x1,y1,z1]], so cuts stay local and the tri count stays low.
@@ -94,6 +98,7 @@ export const CUT_PLANES = [
   Y(C.covY, box(-2.07, 1.0)), Z(C.covZ, covR), Z(-C.covZ, covR),
   Y(C.rwY, box(-INF, -1.97)),
   [C.floorK, 1, 0, C.floorY0, box(-INF, 1.4)], X(C.floorX1, box(-INF, INF, -INF, 0.25)),
+  X(C.gbX, box(-INF, INF, -INF, 0.6)),
   X(C.podX1, box(-INF, INF, -INF, 0.65)), X(C.podX0, box(-INF, INF, -INF, 0.65)), Z(C.podZ, podR), Z(-C.podZ, podR),
 ]
 const belowFloor = (x, y) => y + C.floorK * x < C.floorY0
@@ -111,6 +116,7 @@ export function partOf(x, y, z) {
   if (x < C.covX1 && y > C.covY && az < C.covZ) return 'EngineCover'
   if (belowFloor(x, y) && x < C.floorX1) return 'Floor'
   if (az > C.podZ && x < C.podX1 && x > C.podX0 && y < C.covY) return z > 0 ? 'Sidepod_R' : 'Sidepod_L'
+  if (x < C.gbX) return 'Gearbox'
   return 'Chassis'
 }
 
@@ -159,7 +165,7 @@ export function materialOf(part, x, y, z) {
   if (part === 'Floor' || part === 'CrashStructure') return 'carbon'
   if (part === 'Driver') return 'helmet'
   if (part === 'FrontWing') return az < 0.13 && y > 0.1 ? 'paint' : 'carbon'
-  if (part === 'RearWing' || part === 'RearWing_Flap') return 'carbon'
+  if (part === 'RearWing' || part === 'RearWing_Flap' || part === 'Gearbox') return 'carbon'
   if (part === 'Chassis') {
     // suspension arms + bargeboards are bare carbon
     if (x > 1.25 && x < 2.25 && az > 0.2) return 'carbon'
