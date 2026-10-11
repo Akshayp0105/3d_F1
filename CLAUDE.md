@@ -16,6 +16,8 @@ the licensed RB16B mesh, a Red Bull livery and decals, pan, and a dark studio wi
 | `npm run dev` | Vite dev server (http://localhost:5173) |
 | `npm run build` | typecheck + production build |
 | `npm run build:car` | rebuild `public/models/rb16b.glb` from `assets-src/RB16B_FIXED!.stl` |
+| `npm run build:engine` | rebuild `public/models/engine.glb` from `assets-src/f1_engine_exposed_reconstruction.glb` |
+| `node scripts/car/fit-wheels.mjs` | fit true wheel centres from the tyre tread (if wheels ever wobble) |
 | `npm run shots` | headless-Edge screenshots of idle / exploded / views / launch frames → `shots/` (dev server must be running) |
 | `node scripts/dev/interact.mjs` | real-mouse smoke test: click-explode, double-click launch, skip, drag ≠ click |
 | `node scripts/dev/compare.mjs <dir>` | prototype vs app screenshots, light + dark |
@@ -49,7 +51,8 @@ The licensed model is a 3D-print STL: one fused shell (~111k tris), no parts, no
 4. **Classify** by triangle centroid (`partOf`), then assign a surface material (`materialOf`: paint / carbon / tyre / rim / helmet).
 5. **Write** one node per part with one primitive per material. Body parts stay in **car space** (node at origin), exactly
    like the prototype's part groups, so the explode maths and the object-space livery shader work unchanged.
-   Wheels get axle pivots (spin on local Z). `RearWing_Flap` gets its hinge pivot (DRS rotates on local Z).
+   Wheels get axle pivots (spin on local Z), computed per wheel from the **tyre's own bounding box**. A hand-measured
+   centre put the front wheels 13–15 mm off-axis, so they wobbled like loose wheels. Each tyre is round within ±1.5 mm around its pivot. `RearWing_Flap` gets its hinge pivot (DRS rotates on local Z).
 6. **Compress**: meshopt + quantized normals. Positions stay **float**, because quantizing them adds node transforms,
    which breaks the car-space shader and decal projection. Don't use gltf-transform's `meshopt()`: it force-quantizes positions.
    Mesh names are `${part}_mesh`, because GLTFLoader uniquifies node/mesh name clashes.
@@ -60,11 +63,14 @@ Parts: `Chassis (front monocoque), FrontWing (incl. nose), Halo, Driver, Sidepod
 ## Interior (procedural, fills what the STL shell lacks)
 
 Cavity sizes come from `scripts/car/probe-interior.mjs`. The shell is empty between the cockpit bulkhead (x 0.03) and the gearbox (x −1.35).
-- `car/PowerUnit.tsx`: 90° V6 in the bay. Crankcase; banks built as extruded deck plates with **real bores**, so the pistons
-  are visible pumping once the heads lift. Heads, cam covers and coil packs. Carbon plenum + airbox duct. Split turbo (front compressor
-  with a spinning impeller, MGU-H on the shaft, rear turbine). Iridescent heat-tinted Inconel headers / tailpipe / wastegates. MGU-K + HV cables.
-  Each sub-assembly is a `Stage` with its own explode window (d 0.60–0.78, 0.2 wide), so the engine comes apart after the PU lifts.
-  Stages register in `carRefs.parts` (`PU_Turbine`, `PU_MGUK`, …) so labels can anchor to them.
+- `car/PowerUnit.tsx`: the **supplied engine model**, prepared by `scripts/car/build-engine.mjs`:
+  - **Dropped:** the display stand (chassis pan, rails, diffuser fins), the ivory front housing, its own gearbox (the STL has one) and its tailpipe.
+  - **Normals:** the source has **no normals** (NaN lighting turned the whole frame black through bloom), so crease-angle normals are computed.
+  - **Fit:** 180° turn + scale 0.56 + offset (`ENGINE_FIT`) are baked in, so it sits in car space in the bay (x −1.20 … −0.13, y 0.16 … 0.85, |z| ≤ 0.27).
+  - **Groups:** parts are split into stage nodes `PU_Block, PU_HeadL/R, PU_ExhaustL/R, PU_Intake, PU_MGUK, PU_Turbo, PU_Ancillaries` and joined per material (275 → 44 draw calls).
+  - **Runtime:** each stage has its own explode window (d 0.60–0.76, 0.2 wide), so the engine comes apart after the PU lifts. A tailpipe is routed
+    from the turbo outlet to the STL exhaust exit. Bright machined parts are toned down below bloom, and the MGU-K housing glows when energised.
+    Stages register in `carRefs.parts` so labels can anchor to them.
 - `car/Interior.tsx`: `FuelCell` (bladder, energy store with HV band, rear bulkhead), `Seat`, `DriverBody` (suit, HANS, gloves),
   `SteeringWheel` (live canvas dash: rev LEDs, gear, speed from `transient`).
 - `car/WheelAssembly.tsx`: the STL's solid wheel discs (`rim` primitive) are hidden. Instead: spoked 13" rim, hub, centre-lock nut,

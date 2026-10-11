@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "typecheck": "tsc -b --noEmit",
     "build:car": "node scripts/car/build-car.mjs",
-    "shots": "node scripts/dev/shoot.mjs shots"
+    "shots": "node scripts/dev/shoot.mjs shots",
+    "build:engine": "node scripts/car/build-engine.mjs"
   },
   "dependencies": {
     "@react-three/drei": "^10.7.9",
