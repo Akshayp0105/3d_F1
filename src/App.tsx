@@ -1,18 +1,30 @@
+import { useEffect } from 'react'
 import { Canvas } from '@react-three/fiber'
-import { OrbitControls } from '@react-three/drei'
+import * as THREE from 'three'
+import { Experience } from '@/scene/Experience'
+import { Overlay } from '@/ui/Overlay'
+import { useKeyboard } from '@/hooks/useKeyboard'
+import { useStore } from '@/state/store'
+import { engineAudio } from '@/audio/engine'
 
-// Phase 0 placeholder: proves the R3F stack boots. See CLAUDE.md for the build plan.
 export default function App() {
+  useKeyboard()
+  const sound = useStore(s => s.toggles.sound)
+  useEffect(() => { engineAudio.enabled = sound }, [sound])
   return (
-    <Canvas shadows camera={{ position: [5.2, 2.2, 5.2], fov: 32 }}>
-      <color attach="background" args={['#14171c']} />
-      <ambientLight intensity={0.4} />
-      <directionalLight position={[3.5, 9, 4.5]} intensity={2} />
-      <mesh position={[0, 0.38, 0]}>
-        <boxGeometry args={[4.6, 0.5, 1.6]} />
-        <meshStandardMaterial color="#101836" />
-      </mesh>
-      <OrbitControls target={[0, 0.38, 0]} />
-    </Canvas>
+    <>
+      <div id="stage" role="img" aria-label="Interactive 3D model of the Red Bull RB16B. Drag to orbit, scroll to zoom, click to take it apart, double-click to launch.">
+        <Canvas
+          shadows="percentage"
+          dpr={[1, 2]}
+          gl={{ antialias: false, powerPreference: 'high-performance', toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.08 }}
+          camera={{ fov: 32, near: 0.05, far: 240, position: [-8, 5, 10] }}
+          fallback={<div id="err"><p>This view needs WebGL. Try a recent version of Chrome, Safari, Edge or Firefox.</p></div>}
+        >
+          <Experience />
+        </Canvas>
+      </div>
+      <Overlay />
+    </>
   )
 }
