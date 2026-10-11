@@ -5,6 +5,7 @@ import { Lighting, StudioEnvironment } from './Lighting'
 import { Stage } from './Stage'
 import { RaceTrack } from './RaceTrack'
 import { Showroom } from './Showroom'
+import { Warmup } from './Warmup'
 import { CameraRig } from './CameraRig'
 import { Effects } from './Effects'
 import { ExplodeDriver, LabelProjector } from './SceneSystems'
@@ -27,6 +28,7 @@ export function Experience() {
       </Suspense>
       <LabelProjector />
       <Effects />
+      <Warmup />
     </>
   )
 }

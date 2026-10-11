@@ -59,7 +59,7 @@ export function Stage({ theme }: { theme: ThemeName }) {
 
   useFrame(() => {
     const cine = isCine(useStore.getState().phase)
-    const M = cine ? transient.m : 0, CX = cine ? transient.cx : 0
+    const M = transient.warm ? transient.warm : cine ? transient.m : 0, CX = cine ? transient.cx : 0
     // applyMix
     const bg = scene.background as THREE.Color
     bg.copy(themeBg).lerp(nightBg, M)

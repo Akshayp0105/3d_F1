@@ -131,7 +131,7 @@ export function RaceTrack() {
         })
       }
     const personGeo = new THREE.BoxGeometry(0.36, 0.5, 0.26)
-    const headGeo = new THREE.SphereGeometry(0.1, 10, 8)
+    const headGeo = new THREE.IcosahedronGeometry(0.1, 0) // 20 tris; ~7k heads per frame
 
     const streaks = Array.from({ length: 70 }, () => ({ y: 0.15 + Math.random() * 2.6, z: (Math.random() < 0.5 ? -1 : 1) * (1.3 + Math.random() * 5.5), base: Math.random() * 120 }))
     return { fade, mats, sky, asphalt, fence, standGeo, seats, personGeo, headGeo, streaks }
@@ -186,6 +186,7 @@ export function RaceTrack() {
 
   const root = useRef<THREE.Group>(null!)
   const sky = useRef<THREE.Group>(null!)
+
   const stands = useRef<THREE.Group[]>([])
   const bridge = useRef<THREE.Group>(null!)
   const poles = useRef<THREE.InstancedMesh>(null!)
@@ -202,7 +203,8 @@ export function RaceTrack() {
 
   useFrame(() => {
     const cine = isCine(useStore.getState().phase)
-    const M = cine ? transient.m : 0, S = cine ? transient.s : 0, CX = cine ? transient.cx : 0, dist = transient.dist
+    const W = transient.warm
+    const M = W ? W : cine ? transient.m : 0, S = W ? 1 : cine ? transient.s : 0, CX = cine ? transient.cx : 0, dist = transient.dist
     const on = M > 0.001
     root.current.visible = sky.current.visible = on
     if (!on) { streakGroup.current.visible = false; return }

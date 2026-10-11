@@ -47,6 +47,9 @@ async function ledTexture() {
   const t = new THREE.CanvasTexture(c)
   t.colorSpace = THREE.SRGBColorSpace
   t.anisotropy = 8
+  // seen from inside the cylinder (BackSide), so mirror U to read correctly
+  t.wrapS = THREE.RepeatWrapping
+  t.repeat.x = -1
   return t
 }
 
@@ -96,7 +99,7 @@ export function Showroom({ theme }: { theme: ThemeName }) {
     return {
       fade,
       cyclo: cycloMaterial(),
-      strip: add(new THREE.MeshBasicMaterial({ color: new THREE.Color('#dfe8ff').multiplyScalar(2.4), toneMapped: false })),
+      strip: add(new THREE.MeshBasicMaterial({ color: new THREE.Color('#dfe8ff').multiplyScalar(1.15), toneMapped: false })),
       truss: add(new THREE.MeshStandardMaterial({ color: '#1b1e23', metalness: 0.8, roughness: 0.45 })),
       softbox: add(new THREE.MeshBasicMaterial({ color: new THREE.Color('#ffffff').multiplyScalar(2.2), toneMapped: false, side: THREE.DoubleSide })),
       led: add(new THREE.MeshBasicMaterial({ toneMapped: false, side: THREE.BackSide })),
@@ -108,27 +111,37 @@ export function Showroom({ theme }: { theme: ThemeName }) {
 
   const root = useRef<THREE.Group>(null!)
   const floor = useRef<THREE.Material>(null!)
-  const cone = useRef<THREE.Group>(null!)
+  const spot = useRef<THREE.SpotLight>(null!)
+  // drei's reflector re-renders the whole scene every frame even when hidden, so it is only mounted outside the
+  // launch sequence (otherwise the race track + crowd would be drawn twice per frame)
+  const [reflect, setReflect] = useState(true)
   useFrame(() => {
-    const M = isCine(useStore.getState().phase) ? transient.m : 0
+    const M = transient.warm ? transient.warm : isCine(useStore.getState().phase) ? transient.m : 0
     root.current.visible = M < 0.999
+    const want = !isCine(useStore.getState().phase)
+    if (want !== reflect) setReflect(want)
     r.cyclo.uniforms.uOpacity.value = 1 - M
     for (const m of r.fade) m.opacity = 1 - M
     if (floor.current) { floor.current.transparent = M > 0; floor.current.opacity = 1 - M }
-    cone.current.visible = M < 0.4
+    // fade, never hide: removing a light changes the light count and recompiles every shader (a multi-second
+    // stall on Windows/ANGLE). The volumetric cone mesh is a child of the light.
+    const k = Math.max(0, 1 - M * 2.5)
+    spot.current.intensity = 18 * k
+    spot.current.traverse(o => { const mat = (o as THREE.Mesh).material as THREE.ShaderMaterial | undefined; if (mat?.uniforms?.opacity) mat.uniforms.opacity.value = 0.14 * k })
   })
 
-  const strips = useMemo(() => Array.from({ length: 16 }, (_, i) => (i / 16) * Math.PI * 2 + 0.2), [])
+  // light strips between the LED walls (none behind them)
+  const strips = useMemo(() => Array.from({ length: 20 }, (_, i) => (i / 20) * Math.PI * 2 + 0.16).filter(a => LED_AZ.every(az => Math.abs(Math.atan2(Math.sin(a + az - Math.PI / 2 - Math.PI / 2), Math.cos(a + az - Math.PI))) > 0.55)), [])
   return (
     <group ref={root}>
       {/* reflective turntable (sits just above Stage's matte disc, under the emblem) */}
-      <mesh rotation-x={-Math.PI / 2} position-y={0.0025} receiveShadow>
+      <mesh rotation-x={-Math.PI / 2} position-y={0.0025} receiveShadow visible={reflect}>
         <circleGeometry args={[3.88, 128]} />
-        <MeshReflectorMaterial
+        {reflect && <MeshReflectorMaterial
           ref={floor as React.RefObject<never>}
           color={tokens.disc}
-          resolution={1024}
-          blur={[500, 140]}
+          resolution={512}
+          blur={[300, 100]}
           mixBlur={1.2}
           mixStrength={2.2}
           mixContrast={1.1}
@@ -138,7 +151,7 @@ export function Showroom({ theme }: { theme: ThemeName }) {
           roughness={0.82}
           metalness={0.35}
           mirror={0.55}
-        />
+        />}
       </mesh>
 
       {/* cyclorama wall */}
@@ -148,8 +161,8 @@ export function Showroom({ theme }: { theme: ThemeName }) {
 
       {/* vertical light strips on the wall */}
       {strips.map((a, i) => (
-        <mesh key={i} material={r.strip} position={[Math.cos(a) * (WALL_R - 0.05), 3.4, Math.sin(a) * (WALL_R - 0.05)]} rotation-y={-a}>
-          <boxGeometry args={[0.06, 5.6, 0.18]} />
+        <mesh key={i} material={r.strip} position={[Math.cos(a) * (WALL_R - 0.05), 3.1, Math.sin(a) * (WALL_R - 0.05)]} rotation-y={-a}>
+          <boxGeometry args={[0.035, 4.2, 0.1]} />
         </mesh>
       ))}
 
@@ -184,8 +197,9 @@ export function Showroom({ theme }: { theme: ThemeName }) {
       })}
 
       {/* volumetric key spot over the car */}
-      <group ref={cone}>
+      <group>
         <SpotLight
+          ref={spot}
           position={[0.4, 7.2, 0.3]}
           angle={0.42}
           penumbra={0.6}
