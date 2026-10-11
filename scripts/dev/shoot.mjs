@@ -57,6 +57,25 @@ if (want('engine')) {
   await page.keyboard.press('e')
   await wait(2500)
 }
+if (want('pistons')) {
+  // exploded, top view, pan to the engine bay and zoom; two frames apart to see the pistons move
+  await page.keyboard.press('e')
+  await page.waitForTimeout(400)
+  await page.keyboard.press('5')
+  await wait(3400)
+  await page.mouse.move(720, 450)
+  await page.mouse.down({ button: 'right' })
+  await page.mouse.move(795, 450, { steps: 10 })
+  await page.mouse.up({ button: 'right' })
+  for (let i = 0; i < 8; i++) { await page.mouse.wheel(0, -120); await wait(50) }
+  await wait(2600)
+  await shot('pistons-a')
+  await wait(180)
+  await shot('pistons-b')
+  await page.keyboard.press('e')
+  await page.keyboard.press('1')
+  await wait(2500)
+}
 if (want('views')) {
   for (const [k, n] of [['2', 'front'], ['3', 'side'], ['4', 'rear'], ['5', 'top'], ['6', 'low'], ['1', 'three-quarter']]) {
     await page.keyboard.press(k)

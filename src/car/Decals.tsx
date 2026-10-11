@@ -7,12 +7,19 @@ import * as THREE from 'three'
 import { svgTexture } from '@/three/textures'
 import { DECALS, type DecalDef } from '@/config/decals'
 
-const cache = new Map<string, Promise<THREE.CanvasTexture>>()
-function useSvgTexture(url: string) {
+const cache = new Map<string, Promise<THREE.Texture>>()
+const loadPng = (url: string) =>
+  new THREE.TextureLoader().loadAsync(url).then(t => {
+    t.colorSpace = THREE.SRGBColorSpace
+    t.anisotropy = 8
+    return t
+  })
+/** Brand art: SVGs are rasterised (vector-crisp), PNG wordmarks (from the supplied Oracle model) load as-is. */
+function useBrandTexture(url: string) {
   const [tex, setTex] = useState<THREE.Texture | null>(null)
   useEffect(() => {
     let live = true
-    if (!cache.has(url)) cache.set(url, svgTexture(url))
+    if (!cache.has(url)) cache.set(url, url.endsWith('.svg') ? svgTexture(url) : loadPng(url))
     cache.get(url)!.then(t => live && setTex(t)).catch(() => console.warn('[decals] missing', url))
     return () => { live = false }
   }, [url])
@@ -27,8 +34,8 @@ function basisEuler(normal: THREE.Vector3Tuple, up: THREE.Vector3Tuple) {
   return new THREE.Euler().setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, y, z))
 }
 
-function OneDecal({ def, mesh }: { def: DecalDef; mesh: THREE.Mesh }) {
-  const map = useSvgTexture(def.src)
+export function OneDecal({ def, mesh }: { def: DecalDef; mesh: THREE.Mesh }) {
+  const map = useBrandTexture(def.src)
   const rotation = useMemo(() => basisEuler(def.normal, def.up), [def])
   const ref = useMemo(() => ({ current: mesh }), [mesh])
   if (!map) return null

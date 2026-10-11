@@ -14,7 +14,7 @@ import { ss, damp } from '@/lib/math'
 import { createCarMaterials } from '@/three/materials'
 import { PowerUnit, Radiator } from './PowerUnit'
 import { FuelCell, Seat, DriverBody, SteeringWheel } from './Interior'
-import { WheelInternals, Caliper } from './WheelAssembly'
+import { WheelInternals, Caliper, TyreDecals } from './WheelAssembly'
 import { PartDecals } from './Decals'
 import { carRefs } from './refs'
 
@@ -139,6 +139,7 @@ export function Car() {
           <ExplodablePart key={name} name={name} def={def}>
             {p && <primitive object={p.object} />}
             {p && name.startsWith('Wheel_') && createPortal(<WheelInternals wheel={p.object} m={m} />, p.object)}
+            {p && name.startsWith('Wheel_') && p.meshes.tyre && createPortal(<TyreDecals wheel={p.object} tyre={p.meshes.tyre} />, p.object)}
             {p && name.startsWith('Wheel_') && <Caliper wheel={p.object} m={m} />}
             {extra[name]}
             {p && <PartDecals part={name} meshes={p.meshes} />}

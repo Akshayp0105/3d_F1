@@ -14,6 +14,7 @@ import { ss } from '@/lib/math'
 import { LIVERIES } from '@/config/liveries'
 import type { CarMaterials } from '@/three/materials'
 import { carRefs } from './refs'
+import { Pistons, type Bore } from './Pistons'
 
 export const ENGINE_URL = '/models/engine.glb'
 useGLTF.preload(ENGINE_URL)
@@ -116,6 +117,7 @@ export function PowerUnit({ m }: { m: CarMaterials }) {
   return (
     <group ref={bob}>
       {groups.PU_Block && <primitive object={groups.PU_Block} />}
+      {nodes.Engine?.userData.bores && <Pistons bores={nodes.Engine.userData.bores as Bore[]} m={m} />}
       {Object.keys(STAGES).map(name =>
         groups[name] ? (
           <Stage key={name} name={name}>

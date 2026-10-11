@@ -29,6 +29,15 @@ function cast(o, d) {
 }
 
 const PROBES = {
+  coverRearSideR: [[-1.5, 0.56, 2], [0, 0, -1]],
+  coverMidSideR: [[-1.15, 0.6, 2], [0, 0, -1]],
+  noseSideR: [[1.25, 0.5, 2], [0, 0, -1]],
+  noseSideR2: [[1.0, 0.55, 2], [0, 0, -1]],
+  podSideLowR: [[0.0, 0.32, 2], [0, 0, -1]],
+  podSideMidR: [[-0.35, 0.4, 2], [0, 0, -1]],
+  rwEndLowR: [[-2.42, 0.6, 2], [0, 0, -1]],
+  haloSideR: [[0.6, 0.85, 2], [0, 0, -1]],
+  floorEdgeR2: [[-0.6, 0.17, 2], [0, 0, -1]],
   coverSideR: [[-0.95, 0.75, 2], [0, 0, -1]],
   coverSideR2: [[-1.25, 0.66, 2], [0, 0, -1]],
   coverTop: [[-0.6, 3, 0], [0, -1, 0]],

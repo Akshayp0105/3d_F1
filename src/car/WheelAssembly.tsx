@@ -4,6 +4,9 @@
 import { useMemo } from 'react'
 import * as THREE from 'three'
 import type { CarMaterials } from '@/three/materials'
+import { PZERO } from '@/config/decals'
+import type { Vec3 } from '@/config/parts'
+import { OneDecal } from './Decals'
 
 /** Outboard/inboard face z (wheel-local) from the tyre geometry. */
 export function wheelFaces(wheel: THREE.Object3D) {
@@ -73,4 +76,22 @@ export function Caliper({ wheel, m }: { wheel: THREE.Object3D; m: CarMaterials }
       <boxGeometry args={[0.1, 0.045, 0.07]} />
     </mesh>
   )
+}
+
+/** Pirelli P Zero markings on the outboard sidewall (top + bottom, like the real tyre). Rendered inside the wheel
+ *  node, so they spin with it; projected onto the tyre mesh in wheel-local space. */
+export function TyreDecals({ wheel, tyre }: { wheel: THREE.Object3D; tyre: THREE.Mesh }) {
+  const defs = useMemo(() => {
+    const { side, out } = wheelFaces(wheel)
+    return [1, -1].map(s => ({
+      id: `pzero-${s}`,
+      part: wheel.name,
+      src: PZERO,
+      position: [0, 0.296 * s, out] as Vec3,
+      normal: [0, 0, side] as Vec3,
+      up: [0, s, 0] as Vec3,
+      scale: [0.2, 0.05, 0.05] as Vec3,
+    }))
+  }, [wheel])
+  return <>{defs.map(d => <OneDecal key={d.id} def={d} mesh={tyre} />)}</>
 }
