@@ -112,6 +112,7 @@ function Labels() {
 function Letterbox() {
   const gear = useRef<HTMLSpanElement>(null)
   const kmh = useRef<HTMLSpanElement>(null)
+  const flash = useRef<HTMLDivElement>(null)
   const cine = useStore(s => isCine(s.phase))
   useEffect(() => {
     if (!cine) return
@@ -119,16 +120,19 @@ function Letterbox() {
     const tick = () => {
       if (gear.current) gear.current.textContent = transient.gear
       if (kmh.current) kmh.current.textContent = String(transient.kmh)
+      if (flash.current) flash.current.style.opacity = String(transient.flash)
       raf = requestAnimationFrame(tick)
     }
     tick()
-    return () => cancelAnimationFrame(raf)
+    return () => { cancelAnimationFrame(raf); if (flash.current) flash.current.style.opacity = '0' }
   }, [cine])
   return (
     <>
+      {/* blast flash: warm white, under the letterbox bars */}
+      <div ref={flash} className="flash" aria-hidden="true" />
       <div className="bar top">
         <div className="cap">Red Bull Racing <em>/</em> Launch sequence</div>
-        <button className="skip" onClick={() => cineControls.skip()}>Skip</button>
+        <button className="skip" onClick={() => cineControls.skip()}>Skip to landing</button>
       </div>
       <div className="bar bot">
         <div className="hud"><small style={{ marginLeft: 0 }}>GEAR</small><span ref={gear}>N</span></div>

@@ -10,10 +10,10 @@ await page.evaluate(() => {
   const log = (window.__stalls = []); let last = performance.now(); const t0 = last; let progs = window.__gl.info.programs.length
   const f = () => { const now = performance.now(), n = window.__gl.info.programs.length
     if (now - last > 60 || n !== progs) log.push(`${((now - t0) / 1000).toFixed(2)}s frame ${(now - last).toFixed(0)}ms programs ${progs}→${n}` + (n > progs ? ' | + ' + window.__gl.info.programs.slice(progs).map(p => p.name + ' :: ' + p.cacheKey.split(',').filter((v, i) => i < 3 || /true|SHADOW|Depth|Distance/.test(v)).slice(0, 8).join(',')).join(' | + ') : ''))
-    progs = n; last = now; if (now - t0 < 16000) requestAnimationFrame(f) }
+    progs = n; last = now; if (now - t0 < 18000) requestAnimationFrame(f) }
   requestAnimationFrame(f)
 })
 await page.keyboard.press('l')
-await page.waitForTimeout(16500)
+await page.waitForTimeout(18500)
 console.log((await page.evaluate(() => window.__stalls)).join('\n'))
 await browser.close()

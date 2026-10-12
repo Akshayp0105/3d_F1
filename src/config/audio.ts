@@ -8,3 +8,7 @@ export const ENGINE_SAMPLES = [
   { url: '/audio/engine-high.ogg', rpm: 0.92 },
 ]
 export const IGNITION_SAMPLE = '/audio/ignition.ogg'
+
+// Phase 4B one-shots. If present they replace the synthesized boom / thud; the sub thump and debris rattle layers stay.
+export const EXPLOSION_SAMPLE = '/audio/explosion.ogg'
+export const LAND_SAMPLE = '/audio/land.ogg'
