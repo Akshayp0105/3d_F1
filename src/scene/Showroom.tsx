@@ -126,7 +126,7 @@ export function Showroom({ theme }: { theme: ThemeName }) {
     // fade, never hide: removing a light changes the light count and recompiles every shader (a multi-second
     // stall on Windows/ANGLE). The volumetric cone mesh is a child of the light.
     const k = Math.max(0, 1 - M * 2.5)
-    spot.current.intensity = 18 * k
+    spot.current.intensity = 7 * k
     spot.current.traverse(o => { const mat = (o as THREE.Mesh).material as THREE.ShaderMaterial | undefined; if (mat?.uniforms?.opacity) mat.uniforms.opacity.value = 0.14 * k })
   })
 
@@ -206,7 +206,7 @@ export function Showroom({ theme }: { theme: ThemeName }) {
           distance={11}
           attenuation={8.5}
           anglePower={4.5}
-          intensity={18}
+          intensity={7}
           opacity={0.14}
           color="#e8eeff"
           volumetric

@@ -262,3 +262,98 @@ function loadImage(url: string): Promise<HTMLImageElement | null> {
     img.src = url
   })
 }
+
+// --- stadium realism pass ---
+
+/** One grandstand row of seated fans (35 m of crowd, tileable): shoulders in team/fan colours, skin-tone heads, caps,
+ *  some raised arms and flags, empty seats. Lit from the front/roof, darker at the bottom (seat shadow). Alpha = people. */
+export function crowdTexture(seed = 1) {
+  const W = 2048, H = 96
+  const [c, g] = canvas(W, H)
+  let s = seed
+  const rnd = () => ((s = (s * 16807) % 2147483647) / 2147483647)
+  const shirts = ['#1a2350', '#0d1430', '#1a2350', '#c8102e', '#ff7a1a', '#ff7a1a', '#e9e9e9', '#2b2f36', '#3c4a6b', '#ffc906', '#14161a', '#7a1020']
+  const skins = ['#e9c2a0', '#d29b78', '#a5704d', '#f3d6bd', '#8a5636', '#c48a62']
+  const step = W / 64 // ~0.55 m per seat at 35 m per tile
+  for (let i = 0; i < 64; i++) {
+    const x = i * step + (rnd() - 0.5) * 4
+    if (rnd() < 0.1) { // empty seat back
+      g.fillStyle = '#2a2e35'
+      g.fillRect(x + 4, H - 34, step - 8, 30)
+      continue
+    }
+    const shirt = shirts[(rnd() * shirts.length) | 0], skin = skins[(rnd() * skins.length) | 0]
+    const lean = (rnd() - 0.5) * 4, hh = 10 + rnd() * 3
+    // torso
+    g.fillStyle = shirt
+    g.beginPath()
+    g.roundRect(x + 3 + lean, H - 46, step - 6, 46, [10, 10, 2, 2])
+    g.fill()
+    // arms up (cheering) or a flag
+    const r = rnd()
+    if (r < 0.12) {
+      g.fillRect(x + 4 + lean, H - 76, 5, 32)
+      g.fillRect(x + step - 9 + lean, H - 74, 5, 30)
+      g.fillStyle = skin
+      g.beginPath(); g.arc(x + 6.5 + lean, H - 78, 3.5, 0, 7); g.arc(x + step - 6.5 + lean, H - 76, 3.5, 0, 7); g.fill()
+    } else if (r < 0.17) {
+      g.fillStyle = '#d9d9d9'
+      g.fillRect(x + step / 2 + lean, H - 92, 2, 50)
+      const flag = rnd() < 0.5 ? ['#0d1430', '#c8102e'] : ['#ae1c28', '#ffffff', '#21468b'] // team / Dutch
+      flag.forEach((f, k) => { g.fillStyle = f; g.fillRect(x + step / 2 + 2 + lean, H - 92 + k * (22 / flag.length), 26, 22 / flag.length) })
+    }
+    // head + cap
+    g.fillStyle = skin
+    g.beginPath(); g.arc(x + step / 2 + lean, H - 46 - hh * 0.6, hh, 0, 7); g.fill()
+    if (rnd() < 0.35) {
+      g.fillStyle = rnd() < 0.6 ? '#0d1430' : '#ff7a1a'
+      g.beginPath(); g.arc(x + step / 2 + lean, H - 46 - hh * 0.75, hh + 0.5, Math.PI, 0); g.fill()
+    }
+  }
+  // lighting: roof light from above → darker toward the seat
+  const sh = g.createLinearGradient(0, 0, 0, H)
+  sh.addColorStop(0, 'rgba(0,0,0,0)')
+  sh.addColorStop(1, 'rgba(0,0,0,0.55)')
+  g.globalCompositeOperation = 'source-atop'
+  g.fillStyle = sh
+  g.fillRect(0, 0, W, H)
+  g.globalCompositeOperation = 'source-over'
+  const t = new THREE.CanvasTexture(c)
+  t.wrapS = THREE.RepeatWrapping
+  t.colorSpace = THREE.SRGBColorSpace
+  t.anisotropy = 8
+  return t
+}
+
+/** Soft radial falloff (white centre → transparent), for light pools and lamp glare. */
+export function glowTexture() {
+  const [c, g] = canvas(256)
+  const gr = g.createRadialGradient(128, 128, 0, 128, 128, 128)
+  gr.addColorStop(0, 'rgba(255,255,255,1)')
+  gr.addColorStop(0.25, 'rgba(255,255,255,0.55)')
+  gr.addColorStop(0.6, 'rgba(255,255,255,0.12)')
+  gr.addColorStop(1, 'rgba(255,255,255,0)')
+  g.fillStyle = gr
+  g.fillRect(0, 0, 256, 256)
+  const t = new THREE.CanvasTexture(c)
+  t.colorSpace = THREE.SRGBColorSpace
+  return t
+}
+
+/** Asphalt roughness variation (polished racing line darker = smoother, patches, sealer streaks). Linear data. */
+export function asphaltRoughnessTexture() {
+  const [c, g] = canvas(512)
+  const Z = (z: number) => (z + 8) * 32
+  g.fillStyle = 'rgb(220,220,220)'
+  g.fillRect(0, 0, 512, 512)
+  for (let i = 0; i < 25000; i++) { const v = 170 + Math.random() * 85; g.fillStyle = `rgb(${v},${v},${v})`; g.fillRect(Math.random() * 512, Math.random() * 512, 2, 2) }
+  const lg = g.createLinearGradient(0, Z(-1.8), 0, Z(1.8))
+  lg.addColorStop(0, 'rgba(120,120,120,0)'); lg.addColorStop(0.5, 'rgba(120,120,120,0.6)'); lg.addColorStop(1, 'rgba(120,120,120,0)')
+  g.fillStyle = lg
+  g.fillRect(0, Z(-1.8), 512, Z(1.8) - Z(-1.8))
+  for (let i = 0; i < 14; i++) { g.fillStyle = 'rgba(110,110,110,0.35)'; g.fillRect(Math.random() * 512, Z(-4 + Math.random() * 8), 60 + Math.random() * 160, 2 + Math.random() * 3) }
+  const t = new THREE.CanvasTexture(c)
+  t.wrapS = THREE.RepeatWrapping
+  t.repeat.set(300 / 8, 1)
+  return t
+}

@@ -184,3 +184,21 @@ The AudioContext unlocks inside the launch gesture (`state/actions.ts`).
   - `scene/Warmup.tsx`: after load and behind the loader, renders the race state (mix 1, then 0.5) and runs `gl.compile`.
     The loader waits for `transient.ready`. Result: race went from 5 fps (multi-second compile stalls) to 144 fps.
   - Dev builds expose the renderer as `window.__gl` for these scripts.
+
+## Realism pass 4 (body + stadium)
+
+- **Body:** paint is satin (clearcoat 0.5 / roughness 0.42) with procedural **panel seams** and engine-cover fasteners in
+  the paint shader (`SEAM(...)` lines in `three/materials.ts`, car-space planes, AA'd with `fwidth`). Carbon is less glossy.
+  - **Studio glare:** the bright white patches on up-facing surfaces came from the **rim light's specular** (found by
+    toggling lights via `window.__scene` in dev). The rim is now 0.45π, the env top panel is 2.4, and the env strips are 1.1.
+  - Don't add `sheen` to the paint: it halved the exploded/race frame rate.
+- **Stadium** (`scene/RaceTrack.tsx`):
+  - **Crowd:** painted crowd strips per tier (`crowdTexture`: fans, caps, raised arms, flags, empty seats, roof-light
+    gradient), merged into one mesh per stand. This replaced ~14k instanced boxes.
+  - **Camera flashes:** a `points` shader that twinkles.
+  - **Floodlights:** light pools on the asphalt (instanced additive quads) and a glare sprite per lamp.
+  - **Asphalt:** roughness map.
+  - **Stand LED bands:** on the front and on the roof fascia, facing the track. Mirrored stands use a U-flipped texture.
+  - **Catch fence:** at half opacity (`userData.opacityScale`).
+- `scripts/dev/zoom.mjs out.png <view> <panX> <panY> <wheelClicks>`: zoomed screenshot for detail checks.
+- First load takes about 10 s in headless Edge while the warm-up compiles about 130 shaders. Scripts should wait up to 90 s for `#loader.done`.
