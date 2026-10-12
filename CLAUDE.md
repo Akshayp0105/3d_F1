@@ -238,3 +238,21 @@ This was built from the written description, on the Red Bull car.
   rattle grains) and landing thud. `public/audio/explosion.ogg` / `land.ogg` replace the boom/thud if present.
 - **Measured** (headless Edge, `scripts/dev/fps-blast.mjs`): blast window avg ~99 fps, p95 13.5 ms. No mid-sequence
   shader compiles except the 30 ms lamp sprite and the reflector remount at the end (`scripts/dev/stalls.mjs`).
+
+### Blast realism pass 2
+- **Fireball** (`fireball.ts`): smoke is **lit by the fire with self-shadowing** (two cheap `coarseDist` taps toward the
+  hot core), plus a night-sky ambient on the tops. A **mushroom cap** (vortex-ring torus) rolls at the top of the column,
+  and there's extra high-frequency billow noise. The material is parameterised (`half`, `scale`, `heat`, `seed`), so the
+  same shader renders smaller bursts.
+- **Additions** (`Blast.tsx`):
+  - **Secondary bursts:** two smaller, delayed, offset bursts (`SECONDARY`), so the explosion propagates instead of being one ball.
+  - **Burning "comets":** 9 chunks with fire trails and smoke trails.
+  - **Embers:** 180, floating up on the heat.
+  - **Dust curtain:** an expanding streaky cylinder driven by the shockwave.
+  - **Lens flare:** an anamorphic streak sprite (depthTest off).
+  - **Sky glow:** `transient.blastGlow` lights the clouds and horizon toward the blast (RaceTrack sky shader).
+  - **Launch tyre smoke** (`LaunchSmoke`): left behind on the track.
+  - **Landing:** plank scrape sparks.
+- **Camera:** a dutch tilt in the hero shot and rotational shake. The overhead shot whips its aim toward the detonation.
+  DOF eases to 0.2 during the overhead shot so the blast isn't a blurred disc.
+- **Measured:** blast window avg ~113 fps, p95 12.6 ms (headless Edge).
