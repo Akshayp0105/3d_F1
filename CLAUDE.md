@@ -202,3 +202,57 @@ The AudioContext unlocks inside the launch gesture (`state/actions.ts`).
   - **Catch fence:** at half opacity (`userData.opacityScale`).
 - `scripts/dev/zoom.mjs out.png <view> <panX> <panY> <wheelClicks>`: zoomed screenshot for detail checks.
 - First load takes about 10 s in headless Edge while the warm-up compiles about 130 shaders. Scripts should wait up to 90 s for `#loader.done`.
+
+## Phase 4B: cinematic blast + jump
+
+The brief referenced `spawnBlast`/`updateBlast`/`updateLand` and `reference/blast_*.png`, but **neither exists** in the repo.
+This was built from the written description, on the Red Bull car.
+
+- **Timeline** (`config/timeline.ts`): `top 1.8 · ign 2.0 · launch 3.6 · chase 4.8 · side 7.2 · over 8.8 · blast 10.0 ·
+  hero 10.5 · studio 11.6 (crossfade start) · apex 11.9 · land 13.8 · home 15.6 · end 16.0`.
+  - `CinematicDirector.tsx` builds **one GSAP master timeline**. Channels: speed, car nudge, track mix, time scale `ts`,
+    jump height/pitch, suspension bounce, flash, chromatic aberration spike, FOV punch, shake, haze, DOF/grain/vignette grade.
+  - **Phase:** `reachDecel` is dispatched at touchdown, so `returning` is the landing + glide.
+  - **Skip:** jumps to `land − 0.45`, so the landing still plays. A second Skip calls `endCine()` directly, because seeking suppresses callbacks.
+  - **Dev:** `window.__cineRate` slows the clock for screenshots (`RATE=0.3 node scripts/dev/cine-shots.mjs <dir> 10.1,11.4`).
+- **Slow motion:** `transient.ts` (0.25) scales track scroll, wheel spin, the blast clock (`blastAge`) and the flame
+  animation. The engine and sfx route through `engineAudio.bus()`, a low-pass that closes while `setSlowmo(k)` pitches the engine down.
+- **Blast** (`cinematic/Blast.tsx`, `cinematic/fireball.ts`):
+  - **Placement:** anchored to the track 6.5 m behind the car. It recedes at **30 %** of track speed, a cinematic cheat that keeps it framed behind the car.
+  - **Fireball:** a raymarched volume in a ground-sitting box (`FB_HALF` = 11 m). Three lobes expand, rise and cool, with a
+    domain-warped fbm edge. Temperature drives a blackbody HDR ramp; only the interior burns, so the shell turns to black smoke.
+    Empty space is skipped with the lobe distance. Steps = 24 + 22·`quality`.
+  - **Particles:** smoke-column and dust sprites (instanced billboards), 64 debris pieces (ballistic arcs, slide-to-stop,
+    ember glow), 340 sparks (gravity, HDR, additive points), shockwave ring, 14 procedural ground flames, scorch decal.
+  - **Fire light:** a `pointLight` kept **outside** the toggled group (visible light count is in the shader key).
+- **Landing** (`Landing` in `Blast.tsx`): dust ring + livery-accent floor shockwave, driven by `transient.landAge`; `playLanding()` thud.
+- **Post** (`scene/Effects.tsx`):
+  - **Heat haze:** a custom `HeatHazeEffect` (mainUv distortion around `blastU/V`).
+  - **DOF:** `focusRange` is **world units** in this postprocessing version, so 4.5 m keeps the car sharp. Outside the
+    cinematic its `update()` is skipped and its opacity set to 0, because EffectPass updates every effect every frame.
+    It still runs during the warm-up so its shaders compile behind the loader.
+  - **Grade:** Noise grain, vignette ramp, chromatic aberration spike.
+  - **Flash:** a DOM `.flash` overlay driven from the HUD rAF loop.
+- **Quality:** drei `PerformanceMonitor` sets `transient.quality` (0.5/1), which scales raymarch steps, sparks, debris and smoke.
+- **Audio** (`audio/sfx.ts`): layered synthesized explosion (boom with falling low-pass, crack, sub thump 62→26 Hz, debris
+  rattle grains) and landing thud. `public/audio/explosion.ogg` / `land.ogg` replace the boom/thud if present.
+- **Measured** (headless Edge, `scripts/dev/fps-blast.mjs`): blast window avg ~99 fps, p95 13.5 ms. No mid-sequence
+  shader compiles except the 30 ms lamp sprite and the reflector remount at the end (`scripts/dev/stalls.mjs`).
+
+### Blast realism pass 2
+- **Fireball** (`fireball.ts`): smoke is **lit by the fire with self-shadowing** (two cheap `coarseDist` taps toward the
+  hot core), plus a night-sky ambient on the tops. A **mushroom cap** (vortex-ring torus) rolls at the top of the column,
+  and there's extra high-frequency billow noise. The material is parameterised (`half`, `scale`, `heat`, `seed`), so the
+  same shader renders smaller bursts.
+- **Additions** (`Blast.tsx`):
+  - **Secondary bursts:** two smaller, delayed, offset bursts (`SECONDARY`), so the explosion propagates instead of being one ball.
+  - **Burning "comets":** 9 chunks with fire trails and smoke trails.
+  - **Embers:** 180, floating up on the heat.
+  - **Dust curtain:** an expanding streaky cylinder driven by the shockwave.
+  - **Lens flare:** an anamorphic streak sprite (depthTest off).
+  - **Sky glow:** `transient.blastGlow` lights the clouds and horizon toward the blast (RaceTrack sky shader).
+  - **Launch tyre smoke** (`LaunchSmoke`): left behind on the track.
+  - **Landing:** plank scrape sparks.
+- **Camera:** a dutch tilt in the hero shot and rotational shake. The overhead shot whips its aim toward the detonation.
+  DOF eases to 0.2 during the overhead shot so the blast isn't a blurred disc.
+- **Measured:** blast window avg ~113 fps, p95 12.6 ms (headless Edge).

@@ -31,5 +31,33 @@ export const transient = {
   /** HUD numbers */
   kmh: 0,
   gear: 'N',
+
+  // --- Phase 4B: blast + jump (written by CinematicDirector, read by Car / Blast / Landing / Effects / Overlay) ---
+  /** time scale for particles, track scroll and wheels (1 = normal, SLOWMO during the jump) */
+  ts: 1,
+  /** car height above its rest pose (m) and pitch (rad, + = nose up) */
+  carY: 0,
+  pitch: 0,
+  /** blast simulation clock (scaled seconds since detonation; < 0 = no blast) and its world x on the track */
+  blastAge: -1,
+  blastX: 0,
+  /** fire glow on the sky/clouds 0..1 (RaceTrack sky shader) */
+  blastGlow: 0,
+  /** distance (m) when the launch started (tyre smoke anchoring) */
+  launchDist: 0,
+  /** blast centre in screen UV (for the heat-haze pass) */
+  blastU: 0.5,
+  blastV: 0.5,
+  /** landing clock (real seconds since touchdown; < 0 = not landed) */
+  landAge: -1,
+  /** post fx channels 0..1 */
+  flash: 0,
+  ca: 0,
+  haze: 0,
+  dof: 0,
+  grain: 0,
+  vig: 0,
+  /** GPU quality 0.5..1 (drei PerformanceMonitor): scales raymarch steps and particle counts */
+  quality: 1,
 }
 export type Transient = typeof transient

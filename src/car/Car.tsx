@@ -89,19 +89,24 @@ export function Car() {
     const e = ss(0, 0.6, transient.explode)
     const car = group.current
     car.position.set(cine ? transient.cx : 0, 0.5 * e, 0)
-    car.rotation.z = cine ? transient.roll : 0
+    car.rotation.z = cine ? transient.roll + transient.pitch : 0
+    if (cine) {
+      // jump height; nose-down pitch rotates about the car's centre, so lift it to keep the front wheels off the track
+      car.position.y += transient.carY + Math.max(0, -Math.sin(transient.pitch)) * 1.85
+    }
     if (ENG && !reduceMotion) car.position.y += 0.0018 * (0.4 + RPM) * Math.sin(now * 0.13)
 
     // wheels + brakes
     transient.spinSpeed += ((toggles.spin ? 22 : 0) - transient.spinSpeed) * damp(1.6, dt)
     const wv = cine ? Math.min(40, (S * VMAX) / 0.36) : transient.spinSpeed
-    for (const w of WHEEL_NODES) { const o = parts[w]?.object; if (o) o.rotation.z -= wv * dt }
+    // slow motion (transient.ts) applies to the wheels too
+    for (const w of WHEEL_NODES) { const o = parts[w]?.object; if (o) o.rotation.z -= wv * dt * (cine ? transient.ts : 1) }
     // ×3 vs the prototype so the glow crosses the bloom threshold
     m.brake.emissiveIntensity = 3 * (cine ? transient.brake : (transient.spinSpeed / 22) * 1.6)
     m.disc.emissiveIntensity = m.brake.emissiveIntensity
 
     // DRS flap
-    const open = (cine && S > 0.9 && transient.cineT < T.decel) || toggles.drs
+    const open = (cine && S > 0.9 && transient.cineT < T.blast) || toggles.drs
     transient.flap += ((open ? DRS.open : DRS.closed) - transient.flap) * damp(7, dt)
     const flap = parts.RearWing_Flap?.object
     if (flap) flap.rotation.z = transient.flap

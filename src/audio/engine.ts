@@ -13,6 +13,35 @@ class EngineAudio {
   private layers: Layer[] | null = null
   private synth: { lp: BiquadFilterNode; o1: OscillatorNode; o2: OscillatorNode; o3: OscillatorNode } | null = null
   enabled = true
+  /** slow-motion bus: low-pass after the engine master (and the sfx bus), plus a pitch factor */
+  private slowLp: BiquadFilterNode | null = null
+  private pitch = 1
+
+  /** The shared AudioContext (null until unlocked by a user gesture). */
+  get context() { return this.ctx }
+
+  /** Output node that follows the slow-motion low-pass (engine + explosion sfx route through it). */
+  bus() {
+    const ctx = this.ctx
+    if (!ctx) return null
+    if (!this.slowLp) {
+      this.slowLp = ctx.createBiquadFilter()
+      this.slowLp.type = 'lowpass'
+      this.slowLp.frequency.value = 20000
+      this.slowLp.Q.value = 0.7
+      this.slowLp.connect(ctx.destination)
+    }
+    return this.slowLp
+  }
+
+  /** k = 1 normal speed … 0 deepest slow motion: pitch down and close the low-pass. */
+  setSlowmo(k: number) {
+    const ctx = this.ctx
+    if (!ctx) return
+    const lp = this.bus()!
+    this.pitch = 0.5 + 0.5 * k
+    lp.frequency.setTargetAtTime(380 + 19600 * k * k * k, ctx.currentTime, 0.08)
+  }
 
   /** Create/resume the context. Call from a user gesture (launch click / key). */
   unlock() {
@@ -51,7 +80,7 @@ class EngineAudio {
     this.stop(true)
     const master = ctx.createGain()
     master.gain.value = 0
-    master.connect(ctx.destination)
+    master.connect(this.bus()!)
     this.master = master
     if (this.ignition) {
       const s = ctx.createBufferSource()
@@ -111,10 +140,10 @@ class EngineAudio {
         if (i === 0 && rpm <= a) w = 1
         if (i === L.length - 1 && rpm >= a) w = 1
         L[i].gain.gain.setTargetAtTime(w, t, 0.04)
-        L[i].src.playbackRate.setTargetAtTime(Math.min(2.2, Math.max(0.5, (0.25 + rpm) / (0.25 + a))), t, 0.03)
+        L[i].src.playbackRate.setTargetAtTime(Math.min(2.2, Math.max(0.3, ((0.25 + rpm) / (0.25 + a)) * this.pitch)), t, 0.03)
       }
     } else if (this.synth) {
-      const f = 34 + rpm * 200, n = this.synth
+      const f = (34 + rpm * 200) * this.pitch, n = this.synth
       n.o1.frequency.setTargetAtTime(f, t, 0.03)
       n.o2.frequency.setTargetAtTime(f * 0.5, t, 0.03)
       n.o3.frequency.setTargetAtTime(f * 2.01, t, 0.03)

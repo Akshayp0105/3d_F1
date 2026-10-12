@@ -14,3 +14,12 @@ Until all four loops are present, the site uses the built-in procedural engine s
 Format: OGG Vorbis (or MP3: change the extensions in `src/config/audio.ts`), mono or stereo, 44.1/48 kHz.
 Loops must be recorded at a **constant** rpm and trimmed at zero crossings so they loop cleanly.
 If a loop was recorded at a different rpm, adjust its `rpm` value in `src/config/audio.ts` (0 = idle, 1 = limiter).
+
+## Launch-sequence one-shots (optional)
+
+| File | What | Notes |
+|---|---|---|
+| `explosion.ogg` | Explosion boom (+ crack) | Replaces the synthesized boom; the sub thump and debris rattle layers still play on top |
+| `land.ogg` | Landing thud (tyres + suspension) | Replaces the synthesized thud |
+
+Both route through the slow-motion bus (`engineAudio.bus()`), so they're muffled and lowered during the jump.

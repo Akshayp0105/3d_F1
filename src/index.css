@@ -179,3 +179,7 @@ body.cine .bar.bot { height: calc(clamp(46px, 11vh, 104px) + env(safe-area-inset
 @media (prefers-reduced-motion: reduce) {
   #loader { transition: none; }
 }
+
+/* Phase 4B blast flash */
+.flash { position: fixed; inset: 0; pointer-events: none; z-index: 2; opacity: 0; background: radial-gradient(circle at 45% 55%, #fff6e0 0%, #ffd9a0 35%, rgba(255, 170, 90, 0.85) 100%); mix-blend-mode: screen; }
+@media (prefers-reduced-motion: reduce) { .flash { display: none; } }
