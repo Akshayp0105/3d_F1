@@ -9,7 +9,7 @@ import { useStore } from '@/state/store'
 import { isCine } from '@/state/machine'
 import { transient } from '@/state/transient'
 import { NIGHT } from '@/config/theme'
-import { asphaltTexture, adBoardTexture, bannerTexture, fenceTexture, skylineTexture } from '@/three/textures'
+import { asphaltTexture, adBoardTexture, bannerTexture, fenceTexture, skylineTexture, crowdTexture, glowTexture, asphaltRoughnessTexture } from '@/three/textures'
 
 const L = 300 // scroll loop (m)
 const wrap = (base: number, dist: number) => ((((base - dist) % L) + L) % L) - L / 2
@@ -64,29 +64,37 @@ export function RaceTrack() {
     const add = <T extends THREE.Material>(m: T, keepTransparent = false) => {
       m.transparent = true
       m.opacity = 0
-      m.userData.keepTransparent = keepTransparent
+      m.userData = { ...m.userData, keepTransparent }
       fade.push(m)
       return m
     }
     const asphalt = asphaltTexture(gl.capabilities.getMaxAnisotropy())
+    const asphaltRough = asphaltRoughnessTexture()
+    const crowdTex = crowdTexture(7)
+    const glow = glowTexture()
     const fence = fenceTexture()
     const skyline = skylineTexture()
     const skylineNear = skylineTexture({ near: true })
     skylineNear.repeat.set(4, 1)
     const mats = {
-      track: add(new THREE.MeshStandardMaterial({ map: asphalt, color: new THREE.Color(0.46, 0.46, 0.48), roughness: 0.86, metalness: 0, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 })),
+      track: add(new THREE.MeshStandardMaterial({ map: asphalt, roughnessMap: asphaltRough, color: new THREE.Color(0.46, 0.46, 0.48), roughness: 0.95, envMapIntensity: 0.6, metalness: 0, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 })),
       wall: add(new THREE.MeshStandardMaterial({ color: new THREE.Color('#8a8f96'), roughness: 0.9 })),
       wallTop: add(new THREE.MeshBasicMaterial({ color: new THREE.Color('#c8102e'), toneMapped: false })),
       adL: add(new THREE.MeshStandardMaterial({ roughness: 0.6, emissive: new THREE.Color('#ffffff'), emissiveIntensity: 0.5 })),
       adR: add(new THREE.MeshStandardMaterial({ roughness: 0.6, emissive: new THREE.Color('#ffffff'), emissiveIntensity: 0.5 })),
-      fenceL: add(new THREE.MeshStandardMaterial({ map: fence, alphaTest: 0.05, side: THREE.DoubleSide, roughness: 0.6, metalness: 0.4, depthWrite: false }), true),
-      fenceR: add(new THREE.MeshStandardMaterial({ map: fence.clone(), alphaTest: 0.05, side: THREE.DoubleSide, roughness: 0.6, metalness: 0.4, depthWrite: false }), true),
+      fenceL: add(new THREE.MeshStandardMaterial({ map: fence, userData: { opacityScale: 0.5 }, alphaTest: 0.05, side: THREE.DoubleSide, roughness: 0.6, metalness: 0.4, depthWrite: false }), true),
+      fenceR: add(new THREE.MeshStandardMaterial({ map: fence.clone(), userData: { opacityScale: 0.5 }, alphaTest: 0.05, side: THREE.DoubleSide, roughness: 0.6, metalness: 0.4, depthWrite: false }), true),
       steel: add(new THREE.MeshStandardMaterial({ color: new THREE.Color('#3a3f46'), roughness: 0.5, metalness: 0.7 })),
       lamp: add(new THREE.MeshBasicMaterial({ color: new THREE.Color('#fff4e0').multiplyScalar(3), toneMapped: false })),
       concrete: add(new THREE.MeshStandardMaterial({ color: new THREE.Color('#4a4f57'), roughness: 0.95 })),
       roof: add(new THREE.MeshStandardMaterial({ color: new THREE.Color('#22262c'), roughness: 0.7, metalness: 0.3 })),
       roofLight: add(new THREE.MeshBasicMaterial({ color: new THREE.Color('#dbe8ff').multiplyScalar(2.2), toneMapped: false })),
-      crowd: add(new THREE.MeshStandardMaterial({ roughness: 0.9, envMapIntensity: 0.4 })),
+      crowd: add(new THREE.MeshStandardMaterial({ map: crowdTex, alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.9, envMapIntensity: 0.3, emissive: new THREE.Color('#ffffff'), emissiveMap: crowdTex, emissiveIntensity: 0.18 }), true),
+      pool: add(new THREE.MeshBasicMaterial({ map: glow, color: new THREE.Color('#ffe9c8').multiplyScalar(0.32), blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }), true),
+      glare: add(new THREE.SpriteMaterial({ map: glow, color: new THREE.Color('#fff2dc').multiplyScalar(0.9), blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }), true),
+      band: add(new THREE.MeshStandardMaterial({ roughness: 0.6, emissive: new THREE.Color('#ffffff'), emissiveIntensity: 0.7 })),
+      // stands on the −Z side are mirrored (group scale z = −1), so their bands use a U-flipped copy of the boards
+      bandMirror: add(new THREE.MeshStandardMaterial({ roughness: 0.6, emissive: new THREE.Color('#ffffff'), emissiveIntensity: 0.7 })),
       banner: add(new THREE.MeshStandardMaterial({ roughness: 0.5, emissive: new THREE.Color('#ffffff'), emissiveIntensity: 0.8 })),
       skyline: add(new THREE.MeshBasicMaterial({ map: skyline, side: THREE.BackSide, fog: false, depthWrite: false }), true),
       skylineNear: add(new THREE.MeshBasicMaterial({ map: skylineNear, side: THREE.BackSide, fog: false, depthWrite: false }), true),
@@ -106,35 +114,38 @@ export function RaceTrack() {
     const standGeo = mergeGeometries(tiers)!
     tiers.forEach(g => g.dispose())
 
-    // crowd instances (per stand, local coords), random team-ish colours, ~15 % empty seats
-    // clothing: mostly dark/navy fan wear with team red/orange accents; dimmed for the night (stands sit under roofs)
-    const palette = ['#1a2350', '#0d1430', '#14161a', '#22262c', '#1a2350', '#c8102e', '#ff7a1a', '#d9d9d9', '#3c4a6b', '#0d1430']
-    const skin = ['#e0b899', '#c58c6a', '#8d5a3b', '#f1d0b5', '#a87553']
-    const seats: { m: THREE.Matrix4; head: THREE.Matrix4; c: THREE.Color; skin: THREE.Color }[] = []
-    const tmp = new THREE.Object3D()
-    for (let i = 0; i < STAND_ROWS; i++)
-      for (let x = -STAND_LEN / 2 + 0.4; x < STAND_LEN / 2 - 0.4; x += 0.55) {
-        if (Math.random() < 0.12) continue
-        const s = 0.88 + Math.random() * 0.24, px = x + (Math.random() - 0.5) * 0.15, by = 0.45 * (i + 1) + 0.26 * s, pz = STAND_Z + 0.5 + i * 0.85
-        tmp.position.set(px, by, pz)
-        tmp.rotation.set(0, (Math.random() - 0.5) * 0.5, 0)
-        tmp.scale.setScalar(s)
-        tmp.updateMatrix()
-        const m = tmp.matrix.clone()
-        tmp.position.set(px + (Math.random() - 0.5) * 0.04, by + 0.33 * s, pz)
-        tmp.updateMatrix()
-        seats.push({
-          m,
-          head: tmp.matrix.clone(),
-          c: new THREE.Color(palette[(Math.random() * palette.length) | 0]).multiplyScalar(0.55 + Math.random() * 0.25),
-          skin: new THREE.Color(skin[(Math.random() * skin.length) | 0]).multiplyScalar(0.5),
-        })
-      }
-    const personGeo = new THREE.BoxGeometry(0.36, 0.5, 0.26)
-    const headGeo = new THREE.IcosahedronGeometry(0.1, 0) // 20 tris; ~7k heads per frame
-
+    // crowd: one strip of painted fans per tier riser, merged per stand; each row gets a random U offset so rows differ
+    const rows: THREE.BufferGeometry[] = []
+    for (let i = 0; i < STAND_ROWS; i++) {
+      const g = new THREE.PlaneGeometry(STAND_LEN, 0.95)
+      g.translate(0, 0.45 * (i + 1) + 0.47, STAND_Z + 0.55 + i * 0.85)
+      const uv = g.attributes.uv as THREE.BufferAttribute, off = Math.random()
+      for (let k = 0; k < uv.count; k++) uv.setX(k, uv.getX(k) * (STAND_LEN / 35) + off)
+      rows.push(g)
+    }
+    const crowdGeo = mergeGeometries(rows)!
+    rows.forEach(g => g.dispose())
+    // camera flashes: points on the crowd, each with a random phase (shader below)
+    const N = 260, fp = new Float32Array(N * 3), ph = new Float32Array(N)
+    for (let k = 0; k < N; k++) {
+      const row = (Math.random() * STAND_ROWS) | 0
+      fp.set([(Math.random() - 0.5) * STAND_LEN, 0.45 * (row + 1) + 0.6, STAND_Z + 0.5 + row * 0.85], k * 3)
+      ph[k] = Math.random() * 100
+    }
+    const flashGeo = new THREE.BufferGeometry()
+    flashGeo.setAttribute('position', new THREE.BufferAttribute(fp, 3))
+    flashGeo.setAttribute('phase', new THREE.BufferAttribute(ph, 1))
+    const flashMat = new THREE.ShaderMaterial({
+      transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+      uniforms: { uTime: { value: 0 }, uOpacity: { value: 0 } },
+      vertexShader: `attribute float phase; uniform float uTime; varying float vOn;
+        void main(){ float t = fract(uTime * 0.37 + phase); vOn = smoothstep(0.985, 0.99, t) * (1.0 - smoothstep(0.995, 1.0, t));
+          vec4 mv = modelViewMatrix * vec4(position, 1.0); gl_Position = projectionMatrix * mv; gl_PointSize = 220.0 / -mv.z; }`,
+      fragmentShader: `uniform float uOpacity; varying float vOn;
+        void main(){ float d = length(gl_PointCoord - 0.5); float a = (1.0 - smoothstep(0.0, 0.5, d)) * vOn * uOpacity; gl_FragColor = vec4(vec3(1.4, 1.4, 1.5) * a, a); }`,
+    })
     const streaks = Array.from({ length: 70 }, () => ({ y: 0.15 + Math.random() * 2.6, z: (Math.random() < 0.5 ? -1 : 1) * (1.3 + Math.random() * 5.5), base: Math.random() * 120 }))
-    return { fade, mats, sky, asphalt, fence, standGeo, seats, personGeo, headGeo, streaks }
+    return { fade, mats, sky, asphalt, asphaltRough, glow, crowdTex, fence, standGeo, crowdGeo, flashGeo, flashMat, streaks }
   }, [gl])
 
   useEffect(() => {
@@ -152,8 +163,17 @@ export function RaceTrack() {
     r.mats.adL.map = r.mats.adL.emissiveMap = ads.ad
     r.mats.adR.map = r.mats.adR.emissiveMap = adR
     r.mats.banner.map = r.mats.banner.emissiveMap = ads.banner
-    for (const m of [r.mats.adL, r.mats.adR, r.mats.banner]) m.needsUpdate = true
-    return () => { ads.ad.dispose(); adR.dispose(); ads.banner.dispose() }
+    // stand LED bands: 70 m of boards (texture tile = 25 m)
+    const band = ads.ad.clone()
+    band.repeat.set(STAND_LEN / 25, 1)
+    band.needsUpdate = true
+    r.mats.band.map = r.mats.band.emissiveMap = band
+    const bandM = band.clone()
+    bandM.repeat.set(-STAND_LEN / 25, 1)
+    bandM.needsUpdate = true
+    r.mats.bandMirror.map = r.mats.bandMirror.emissiveMap = bandM
+    for (const m of [r.mats.adL, r.mats.adR, r.mats.banner, r.mats.band, r.mats.bandMirror]) m.needsUpdate = true
+    return () => { ads.ad.dispose(); adR.dispose(); ads.banner.dispose(); band.dispose(); bandM.dispose() }
   }, [ads, r])
 
   useEffect(
@@ -164,25 +184,15 @@ export function RaceTrack() {
       r.asphalt.dispose()
       r.fence.dispose()
       r.standGeo.dispose()
-      r.personGeo.dispose()
-      r.headGeo.dispose()
+      r.crowdGeo.dispose()
+      r.flashGeo.dispose()
+      r.flashMat.dispose()
+      r.asphaltRough.dispose()
+      r.glow.dispose()
+      r.crowdTex.dispose()
     },
     [r],
   )
-
-  // crowd instance setup (one InstancedMesh per stand)
-  const crowdRefs = useRef<THREE.InstancedMesh[]>([])
-  const headRefs = useRef<THREE.InstancedMesh[]>([])
-  useEffect(() => {
-    const fill = (list: THREE.InstancedMesh[], head: boolean) =>
-      list.forEach(im => {
-        r.seats.forEach((s, i) => { im.setMatrixAt(i, head ? s.head : s.m); im.setColorAt(i, head ? s.skin : s.c) })
-        im.instanceMatrix.needsUpdate = true
-        if (im.instanceColor) im.instanceColor.needsUpdate = true
-      })
-    fill(crowdRefs.current, false)
-    fill(headRefs.current, true)
-  }, [r])
 
   const root = useRef<THREE.Group>(null!)
   const sky = useRef<THREE.Group>(null!)
@@ -192,6 +202,8 @@ export function RaceTrack() {
   const poles = useRef<THREE.InstancedMesh>(null!)
   const arms = useRef<THREE.InstancedMesh>(null!)
   const lamps = useRef<THREE.InstancedMesh>(null!)
+  const pools = useRef<THREE.InstancedMesh>(null!)
+  const glares = useRef<THREE.Sprite[]>([])
   const streakGroup = useRef<THREE.Group>(null!)
   const streakRefs = useRef<THREE.Mesh[]>([])
   const tmp = useMemo(() => new THREE.Object3D(), [])
@@ -209,11 +221,13 @@ export function RaceTrack() {
     root.current.visible = sky.current.visible = on
     if (!on) { streakGroup.current.visible = false; return }
     for (const m of r.fade) {
-      m.opacity = M
+      m.opacity = M * (m.userData.opacityScale ?? 1)
       m.transparent = m.userData.keepTransparent || M < 0.999
     }
     r.sky.uniforms.uOpacity.value = M
     r.sky.uniforms.uTime.value += 0.016
+    r.flashMat.uniforms.uTime.value += 0.016
+    r.flashMat.uniforms.uOpacity.value = M
 
     // scrolling textures
     r.asphalt.offset.x = (dist / 8) % 1
@@ -229,8 +243,13 @@ export function RaceTrack() {
       tmp.position.set(x, 5.5, gz.side * 9.4); tmp.scale.set(1, 1, 1); tmp.updateMatrix(); poles.current.setMatrixAt(i, tmp.matrix)
       tmp.position.set(x, 10.9, gz.side * 8.0); tmp.updateMatrix(); arms.current.setMatrixAt(i, tmp.matrix)
       tmp.position.set(x, 10.6, gz.side * 6.9); tmp.rotation.set(gz.side * 0.5, 0, 0); tmp.updateMatrix(); lamps.current.setMatrixAt(i, tmp.matrix)
+      // pool of light on the asphalt under the lamp, and a glare halo on the lamp head
+      tmp.position.set(x, 0.012, gz.side * 4.2); tmp.rotation.set(-Math.PI / 2, 0, 0); tmp.scale.set(11, 8, 1); tmp.updateMatrix(); pools.current.setMatrixAt(i, tmp.matrix)
+      tmp.scale.set(1, 1, 1)
+      const halo = glares.current[i]
+      if (halo) halo.position.set(x, 10.45, gz.side * 6.85)
     })
-    poles.current.instanceMatrix.needsUpdate = arms.current.instanceMatrix.needsUpdate = lamps.current.instanceMatrix.needsUpdate = true
+    poles.current.instanceMatrix.needsUpdate = arms.current.instanceMatrix.needsUpdate = lamps.current.instanceMatrix.needsUpdate = pools.current.instanceMatrix.needsUpdate = true
 
     stands.current.forEach((g, i) => { g.position.x = wrap(STAND_BASES[i % STAND_BASES.length] + (i >= STAND_BASES.length ? 50 : 0), dist) })
     bridge.current.position.x = wrap(BRIDGE_BASE, dist)
@@ -292,6 +311,12 @@ export function RaceTrack() {
         <instancedMesh ref={lamps} args={[undefined, undefined, gantries.length]} material={m.lamp} frustumCulled={false}>
           <boxGeometry args={[2.6, 0.18, 0.7]} />
         </instancedMesh>
+        <instancedMesh ref={pools} args={[undefined, undefined, gantries.length]} material={m.pool} frustumCulled={false} renderOrder={1}>
+          <planeGeometry args={[1, 1]} />
+        </instancedMesh>
+        {gantries.map((_, i) => (
+          <sprite key={i} ref={el => { if (el) glares.current[i] = el }} material={m.glare} scale={[2.4, 1.3, 1]} />
+        ))}
 
         {/* grandstands with crowd, both sides */}
         {[...STAND_BASES, ...STAND_BASES].map((_, i) => {
@@ -300,8 +325,15 @@ export function RaceTrack() {
             <group key={i} ref={el => { if (el) stands.current[i] = el }}>
               <group scale={[1, 1, side]}>
                 <mesh geometry={r.standGeo} material={m.concrete} />
-                <instancedMesh ref={el => { if (el) crowdRefs.current[i] = el }} args={[r.personGeo, m.crowd, r.seats.length]} frustumCulled={false} />
-                <instancedMesh ref={el => { if (el) headRefs.current[i] = el }} args={[r.headGeo, m.crowd, r.seats.length]} frustumCulled={false} />
+                <mesh geometry={r.crowdGeo} material={m.crowd} />
+                <points geometry={r.flashGeo} material={r.flashMat} frustumCulled={false} />
+                {/* LED advertising band on the stand front and the roof fascia */}
+                <mesh material={side > 0 ? m.band : m.bandMirror} position={[0, 0.23, STAND_Z - 0.01]} rotation-y={Math.PI}>
+                  <planeGeometry args={[STAND_LEN, 0.42]} />
+                </mesh>
+                <mesh material={side > 0 ? m.band : m.bandMirror} position={[0, 7.05, STAND_Z - 0.62]} rotation-y={Math.PI}>
+                  <planeGeometry args={[STAND_LEN + 2, 0.7]} />
+                </mesh>
                 <mesh material={m.roof} position={[0, 7.4, STAND_Z + 4.6]} rotation-x={-0.12}>
                   <boxGeometry args={[STAND_LEN + 2, 0.3, 10.5]} />
                 </mesh>

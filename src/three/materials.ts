@@ -22,8 +22,9 @@ export function createCarMaterials() {
     carbonScale: { value: 7.5 },
   }
 
-  /** Livery paint: matte base, yellow nose tip, darker lower bodywork; inner faces of cut panels show bare carbon. */
-  const paint = new THREE.MeshPhysicalMaterial({ metalness: 0.18, roughness: 0.48, clearcoat: 0.25, clearcoatRoughness: 0.3, envMapIntensity: 0.75, side: THREE.DoubleSide })
+  /** Livery paint: satin base with a soft clearcoat sheen, yellow nose tip, darker lower bodywork, procedural panel
+   *  seams and fastener dots; inner faces of cut panels show bare carbon. */
+  const paint = new THREE.MeshPhysicalMaterial({ metalness: 0.12, roughness: 0.44, clearcoat: 0.5, clearcoatRoughness: 0.42, envMapIntensity: 0.7, side: THREE.DoubleSide })
   paint.onBeforeCompile = sh => {
     Object.assign(sh.uniforms, { uBase: U.base, uAccent: U.accent, uAccent2: U.accent2, uCarbon: U.carbon, uCarbonScale: U.carbonScale })
     OBJ_VARYINGS_VS(sh)
@@ -37,6 +38,19 @@ export function createCarMaterials() {
         float nose = smoothstep(2.50 - aa, 2.50 + aa, p.x) * (1.0 - smoothstep(0.17, 0.2, abs(p.z)));
         vec3 col = mix(uBase, uAccent2, nose);
         col *= mix(0.55, 1.0, smoothstep(0.12, 0.26, p.y));
+        // panel seams: thin dark grooves where the real car's bodywork panels meet (car space, AA via fwidth)
+        float seam = 0.0;
+        #define SEAM(d, lo, hi, q) { float w = fwidth(d) * 1.2 + 0.0015; seam = max(seam, (1.0 - smoothstep(0.0, w, abs(d))) * step(lo, q) * step(q, hi)); }
+        SEAM(p.x - 1.36, 0.25, 0.9, p.y)          // nose cone / monocoque joint
+        SEAM(p.x + 0.42, 0.55, 1.2, p.y)          // engine cover front edge behind the airbox
+        SEAM(p.y - 0.585, -1.9, -0.45, p.x)       // engine cover lower edge
+        SEAM(p.x - 0.62, 0.1, 0.55, p.y)          // sidepod inlet panel
+        SEAM(p.y - 0.255, -1.5, 0.6, p.x)         // sidepod / floor split line
+        // quick-release fasteners along the engine cover edge
+        vec2 fc = vec2(fract((p.x + 1.9) / 0.22) - 0.5, (p.y - 0.6) / 0.22);
+        float fast = (1.0 - smoothstep(0.03, 0.05, length(fc))) * step(-1.85, p.x) * step(p.x, -0.5) * step(0.18, abs(p.z));
+        col *= 1.0 - 0.7 * seam;
+        col = mix(col, vec3(0.32, 0.34, 0.38), fast * 0.8);
         if (!gl_FrontFacing) {
           vec3 bw = pow(abs(normalize(vObjN)), vec3(4.0));
           bw /= (bw.x + bw.y + bw.z);
@@ -48,7 +62,7 @@ export function createCarMaterials() {
   }
 
   /** Bare carbon with a triplanar weave. */
-  const carbon = new THREE.MeshPhysicalMaterial({ color: 0xffffff, roughness: 0.42, metalness: 0.15, clearcoat: 0.35, clearcoatRoughness: 0.25, envMapIntensity: 0.6, side: THREE.DoubleSide })
+  const carbon = new THREE.MeshPhysicalMaterial({ color: 0xffffff, roughness: 0.5, metalness: 0.1, clearcoat: 0.3, clearcoatRoughness: 0.35, envMapIntensity: 0.45, side: THREE.DoubleSide })
   carbon.onBeforeCompile = sh => {
     Object.assign(sh.uniforms, { uCarbon: U.carbon, uCarbonScale: U.carbonScale })
     OBJ_VARYINGS_VS(sh)

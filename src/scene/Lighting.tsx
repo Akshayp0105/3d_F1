@@ -24,7 +24,8 @@ export function Lighting() {
         shadow-bias={-0.0004}
         shadow-normalBias={0.02}
       />
-      <directionalLight position={[-7, 4, -5]} color={0xcfe3ff} intensity={1.3 * PI} />
+      {/* rim: kept low; at 1.3π its specular bounced off the flat upper surfaces straight at the front three-quarter camera */}
+      <directionalLight position={[-7, 5, -5]} color={0xcfe3ff} intensity={0.45 * PI} />
       <directionalLight position={[-2, 3, 7]} color={0xfff1e2} intensity={0.5 * PI} />
     </>
   )
@@ -32,7 +33,7 @@ export function Lighting() {
 
 /** Studio reflections: the prototype's PMREM scene of emissive panels (buildEnv, lines 211–230) as Lightformers. */
 const PANELS: [w: number, h: number, color: string, intensity: number, pos: [number, number, number]][] = [
-  [12, 3.2, '#ffffff', 5.0, [0, 9, 0]],
+  [12, 3.2, '#ffffff', 2.4, [0, 9, 0]],
   [7, 2.2, '#ffffff', 3.0, [9, 3.5, 3]],
   [7, 2.2, '#d8ecff', 2.4, [-9, 3.5, -3]],
   [5, 6, '#ffe9d2', 1.6, [0, 3, -10]],
@@ -51,7 +52,7 @@ export function StudioEnvironment({ theme }: { theme: ThemeName }) {
       {/* the showroom's vertical wall strips, so they show up as reflections on the paint */}
       {Array.from({ length: 8 }, (_, i) => {
         const a = (i / 8) * Math.PI * 2 + 0.2
-        return <Lightformer key={`s${i}`} form="rect" scale={[0.25, 6, 1]} intensity={2.2} color="#dfe8ff" position={[Math.cos(a) * 12, 3.4, Math.sin(a) * 12]} target={[0, 1, 0]} />
+        return <Lightformer key={`s${i}`} form="rect" scale={[0.25, 6, 1]} intensity={1.1} color="#dfe8ff" position={[Math.cos(a) * 12, 3.4, Math.sin(a) * 12]} target={[0, 1, 0]} />
       })}
     </Environment>
   )
