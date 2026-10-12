@@ -99,6 +99,9 @@ export function CinematicDirector() {
     // cinematic grade for the whole sequence: DOF on the car, film grain, stronger vignette
     to({ dof: 1, grain: 1, vig: 1, duration: 1.2, ease: 'power1.inOut' }, 0)
     to({ dof: 0, grain: 0, vig: 0, duration: 1.0, ease: 'power1.inOut' }, T.home - 0.6)
+    // keep the explosion readable in the overhead shot: shallow focus would melt it into a blurred disc
+    to({ dof: 0.2, duration: 0.4, ease: 'power1.inOut' }, T.over)
+    to({ dof: 1, duration: 0.6, ease: 'power1.inOut' }, T.hero)
     // events
     t.call(() => engineAudio.start(), [], T.ign)
     t.call(() => {
@@ -207,6 +210,11 @@ export function CinematicDirector() {
     if (cP.y < 0.12) cP.y = 0.12
     camera.position.copy(cP)
     camera.lookAt(cL)
+    // camera roll: rotational shake from the blast/landing, plus a slow dutch tilt in the hero shot (hand-held feel)
+    if (!reduce) {
+      const dutch = t >= T.hero && t < T.land + 0.25 ? 0.07 * Math.sin(Math.min(1, (t - T.hero) / 1.2) * Math.PI * 0.5) - 0.025 * Math.sin((t - T.hero) * 0.9) : 0
+      camera.rotateZ(dutch + ch.shake * 0.05 * Math.sin(now * 0.061) + eng * 0.002 * Math.sin(now * 0.017))
+    }
     camera.fov = rig.baseFov + 9 * s * m + ch.fov
     camera.updateProjectionMatrix()
 

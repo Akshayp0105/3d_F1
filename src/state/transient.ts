@@ -41,6 +41,10 @@ export const transient = {
   /** blast simulation clock (scaled seconds since detonation; < 0 = no blast) and its world x on the track */
   blastAge: -1,
   blastX: 0,
+  /** fire glow on the sky/clouds 0..1 (RaceTrack sky shader) */
+  blastGlow: 0,
+  /** distance (m) when the launch started (tyre smoke anchoring) */
+  launchDist: 0,
   /** blast centre in screen UV (for the heat-haze pass) */
   blastU: 0.5,
   blastV: 0.5,

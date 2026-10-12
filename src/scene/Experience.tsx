@@ -1,6 +1,6 @@
 import { Suspense } from 'react'
 import { PerformanceMonitor } from '@react-three/drei'
-import { Blast, Landing } from '@/cinematic/Blast'
+import { Blast, Landing, LaunchSmoke } from '@/cinematic/Blast'
 import { transient } from '@/state/transient'
 import { useThemeName } from '@/config/theme'
 import { Car } from '@/car/Car'
@@ -28,6 +28,7 @@ export function Experience() {
       <RaceTrack />
       <Blast />
       <Landing />
+      <LaunchSmoke />
       {/* low-end GPUs: fewer particles and raymarch steps in the blast */}
       <PerformanceMonitor onDecline={() => { transient.quality = 0.5 }} onIncline={() => { transient.quality = 1 }} />
       <Suspense fallback={null}>

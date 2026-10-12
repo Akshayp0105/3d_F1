@@ -26,10 +26,10 @@ function skyMaterial() {
     depthWrite: false,
     transparent: true,
     fog: false,
-    uniforms: { uTime: { value: 0 }, uOpacity: { value: 0 }, uHorizon: { value: new THREE.Color(NIGHT.bg) }, uGlow: { value: new THREE.Color('#3a2a2a') }, uZenith: { value: new THREE.Color('#020308') } },
+    uniforms: { uBlastGlow: { value: 0 }, uBlastDir: { value: new THREE.Vector3(-1, 0.1, 0) }, uTime: { value: 0 }, uOpacity: { value: 0 }, uHorizon: { value: new THREE.Color(NIGHT.bg) }, uGlow: { value: new THREE.Color('#3a2a2a') }, uZenith: { value: new THREE.Color('#020308') } },
     vertexShader: 'varying vec3 vDir; void main(){ vDir = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
     fragmentShader: `
-      uniform float uOpacity; uniform vec3 uHorizon; uniform vec3 uGlow; uniform vec3 uZenith; uniform float uTime; varying vec3 vDir;
+      uniform float uOpacity; uniform vec3 uHorizon; uniform vec3 uGlow; uniform vec3 uZenith; uniform float uTime; uniform float uBlastGlow; uniform vec3 uBlastDir; varying vec3 vDir;
       float hash(vec3 p){ return fract(sin(dot(p, vec3(12.9898,78.233,45.164))) * 43758.5453); }
       float h2(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
       float noise(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
@@ -48,6 +48,9 @@ function skyMaterial() {
         vec3 cloudCol = mix(vec3(0.16, 0.11, 0.1), vec3(0.06, 0.07, 0.1), smoothstep(0.05, 0.4, h));
         col = mix(col, cloudCol, cloud * 0.85);
         col += vec3(star) * 0.6 * (1.0 - cloud);
+        // the explosion lights the clouds and horizon in its direction (underlit, warm)
+        float bd = max(dot(vDir, normalize(uBlastDir)), 0.0);
+        col += vec3(1.0, 0.38, 0.1) * uBlastGlow * (pow(bd, 5.0) * (0.35 + cloud * 1.6) + pow(bd, 1.5) * 0.06 * exp(-max(h, 0.0) * 6.0));
         gl_FragColor = vec4(col, uOpacity);
         #include <colorspace_fragment>
       }`,
@@ -226,6 +229,8 @@ export function RaceTrack() {
     }
     r.sky.uniforms.uOpacity.value = M
     r.sky.uniforms.uTime.value += 0.016
+    r.sky.uniforms.uBlastGlow.value = transient.blastGlow
+    r.sky.uniforms.uBlastDir.value.set(transient.blastX, 4, 0.3)
     r.flashMat.uniforms.uTime.value += 0.016
     r.flashMat.uniforms.uOpacity.value = M
 

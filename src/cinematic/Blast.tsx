@@ -10,8 +10,17 @@ import { transient } from '@/state/transient'
 import { LIVERIES } from '@/config/liveries'
 import { useStore } from '@/state/store'
 import { createFireballMaterial, FB_HALF } from './fireball'
+import { T } from '@/config/timeline'
+import { isCine } from '@/state/machine'
 
 const N_SPARK = 340, N_DEBRIS = 64, N_SMOKE = 46, N_DUST = 36, N_FLAME = 14
+/** burning debris "comets": fire trail (points) + smoke trail (sprites) */
+const N_COMET = 9, TRAIL = 14, N_EMBER = 180
+/** secondary bursts: offset (m, blast-local), delay (s of blast clock), scale, seed */
+const SECONDARY = [
+  { off: [-4.2, 0, -4.6] as const, delay: 0.32, scale: 0.48, seed: 0.71, half: 6 },
+  { off: [3.4, 0, 4.8] as const, delay: 0.55, scale: 0.4, seed: 0.13, half: 5 },
+]
 const G = 9.81
 
 /** seeded PRNG so every launch looks the same (matches "reference timing", easier to art-direct) */
@@ -155,6 +164,70 @@ function sparkMaterial() {
   })
 }
 
+/** Comet fire trail + rising embers: like sparks but bigger, softer, cooler. */
+function trailMaterial(sizeBase: number, sizeLife: number) {
+  return new THREE.ShaderMaterial({
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    uniforms: { uOpacity: { value: 1 }, uTime: { value: 0 } },
+    vertexShader: /* glsl */ `
+      attribute float aLife; varying float vLife; uniform float uTime;
+      void main(){ vLife = aLife; vec4 mv = modelViewMatrix * vec4(position, 1.0); gl_Position = projectionMatrix * mv;
+        float flick = 0.75 + 0.25 * sin(uTime * 23.0 + position.x * 7.0 + position.y * 5.0);
+        gl_PointSize = (aLife > 0.0 ? (${sizeBase.toFixed(1)} + ${sizeLife.toFixed(1)} * aLife) * flick : 0.0) / -mv.z; }`,
+    fragmentShader: /* glsl */ `
+      uniform float uOpacity; varying float vLife;
+      void main(){ float d = length(gl_PointCoord - 0.5); float a = (1.0 - smoothstep(0.0, 0.5, d)) * smoothstep(0.0, 0.2, vLife);
+        vec3 c = mix(vec3(1.6, 0.18, 0.02), vec3(4.5, 2.0, 0.6), smoothstep(0.35, 1.0, vLife));
+        gl_FragColor = vec4(c * a * uOpacity, a * uOpacity); }`,
+  })
+}
+
+/** Dust curtain: an expanding open cylinder of dust thrown up by the shockwave, streaky, lit by the fire. */
+function curtainMaterial() {
+  return new THREE.ShaderMaterial({
+    transparent: true,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    uniforms: { uA: { value: 0 }, uAge: { value: 0 }, uLit: { value: 1 } },
+    vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+    fragmentShader: /* glsl */ `
+      uniform float uA; uniform float uAge; uniform float uLit; varying vec2 vUv;
+      float h(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+      float n(vec2 p){ vec2 i = floor(p), f = fract(p); f = f*f*(3.0-2.0*f); return mix(mix(h(i), h(i+vec2(1,0)), f.x), mix(h(i+vec2(0,1)), h(i+vec2(1,1)), f.x), f.y); }
+      void main(){
+        float streak = n(vec2(vUv.x * 60.0, vUv.y * 2.0 - uAge * 1.5)) * 0.6 + n(vec2(vUv.x * 140.0, vUv.y * 5.0 - uAge * 2.5)) * 0.4;
+        float a = smoothstep(1.0, 0.0, vUv.y) * smoothstep(0.0, 0.08, vUv.y) * (0.35 + streak) * uA;
+        vec3 c = mix(vec3(0.16, 0.13, 0.1), vec3(0.9, 0.42, 0.14), uLit * (1.0 - vUv.y));
+        gl_FragColor = vec4(c, a * 0.55);
+      }`,
+  })
+}
+
+/** Anamorphic lens-flare streak (horizontal), additive, ignores depth: a lens artefact, not a scene object. */
+function flareTexture() {
+  const c = document.createElement('canvas')
+  c.width = 512
+  c.height = 64
+  const g = c.getContext('2d')!
+  const gr = g.createLinearGradient(0, 0, 512, 0)
+  gr.addColorStop(0, 'rgba(90,140,255,0)')
+  gr.addColorStop(0.3, 'rgba(110,160,255,0.35)')
+  gr.addColorStop(0.47, 'rgba(255,220,180,1)')
+  gr.addColorStop(0.53, 'rgba(255,220,180,1)')
+  gr.addColorStop(0.7, 'rgba(110,160,255,0.35)')
+  gr.addColorStop(1, 'rgba(90,140,255,0)')
+  g.fillStyle = gr
+  for (let y = 0; y < 64; y++) {
+    g.globalAlpha = Math.exp(-Math.pow((y - 32) / 4.5, 2))
+    g.fillRect(0, y, 512, 1)
+  }
+  const t = new THREE.CanvasTexture(c)
+  t.colorSpace = THREE.SRGBColorSpace
+  return t
+}
+
 /** Expanding ground shockwave ring. */
 function ringMaterial() {
   return new THREE.ShaderMaterial({
@@ -229,12 +302,35 @@ export function Blast() {
       delay: rnd() * 1.3, a: rnd() * Math.PI * 2, out: 0.6 + rnd() * 2.4, up: 1.6 + rnd() * 3.2, s0: 1.6 + rnd() * 1.6, s1: 5 + rnd() * 5, rot: rnd() * 6, spin: (rnd() - 0.5) * 0.4, y0: 1 + rnd() * 3,
     }))
     const dust = Array.from({ length: N_DUST }, () => ({ a: rnd() * Math.PI * 2, sp: 9 + rnd() * 9, y: 0.3 + rnd() * 1.0, s1: 3 + rnd() * 4, rot: rnd() * 6 }))
-    return { puff, scorch, fireball, smokeMat, dustMat, flameMat, sparkMat, ringMat, scorchMat, debrisMat, smokeGeo, dustGeo, flameGeo, sparkGeo, sparks, debris, smoke, dust }
+    // --- realism pass 2: secondary bursts, burning comets, embers, dust curtain, lens flare ---
+    const secondary = SECONDARY.map(b => createFireballMaterial({ half: b.half, scale: b.scale, seed: b.seed, heat: 0.9 }))
+    const cometMat = trailMaterial(26, 70)
+    const emberMat = trailMaterial(6, 12)
+    const cometGeo = new THREE.BufferGeometry()
+    cometGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(N_COMET * TRAIL * 3), 3))
+    cometGeo.setAttribute('aLife', new THREE.BufferAttribute(new Float32Array(N_COMET * TRAIL), 1))
+    const cometSmokeGeo = spriteGeo(N_COMET * TRAIL)
+    const comets = Array.from({ length: N_COMET }, () => {
+      const a = rnd() * Math.PI * 2, el = 0.7 + rnd() * 0.6, sp = 11 + rnd() * 9
+      return { v: new THREE.Vector3(Math.cos(a) * Math.cos(el) * sp, Math.sin(el) * sp, Math.sin(a) * Math.cos(el) * sp), burn: 1.2 + rnd() * 0.9 }
+    })
+    const emberGeo = new THREE.BufferGeometry()
+    emberGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(N_EMBER * 3), 3))
+    emberGeo.setAttribute('aLife', new THREE.BufferAttribute(new Float32Array(N_EMBER), 1))
+    const embers = Array.from({ length: N_EMBER }, () => ({ t0: 0.15 + rnd() * 3.5, r: rnd() * 5, a: rnd() * Math.PI * 2, up: 1.2 + rnd() * 2.4, life: 1.8 + rnd() * 2.5, ph: rnd() * 6 }))
+    const curtainMat = curtainMaterial()
+    const flareTex = flareTexture()
+    const flareMat = new THREE.SpriteMaterial({ map: flareTex, blending: THREE.AdditiveBlending, depthTest: false, depthWrite: false, toneMapped: false, transparent: true, opacity: 0 })
+    return {
+      puff, scorch, fireball, smokeMat, dustMat, flameMat, sparkMat, ringMat, scorchMat, debrisMat, smokeGeo, dustGeo, flameGeo, sparkGeo, sparks, debris, smoke, dust,
+      secondary, cometMat, emberMat, cometGeo, cometSmokeGeo, comets, emberGeo, embers, curtainMat, flareTex, flareMat,
+    }
   }, [])
 
   useEffect(
     () => () => {
       Object.values(r).forEach(v => (v as { dispose?: () => void })?.dispose?.())
+      r.secondary.forEach(m => m.dispose())
     },
     [r],
   )
@@ -244,6 +340,9 @@ export function Blast() {
   const debrisMesh = useRef<THREE.InstancedMesh>(null!)
   const ring = useRef<THREE.Mesh>(null!)
   const light = useRef<THREE.PointLight>(null!)
+  const secBoxes = useRef<THREE.Mesh[]>([])
+  const curtain = useRef<THREE.Mesh>(null!)
+  const flare = useRef<THREE.Sprite>(null!)
   const tmp = useMemo(() => ({ o: new THREE.Object3D(), v: new THREE.Vector3(), m: new THREE.Matrix4() }), [])
 
   useFrame(({ clock }) => {
@@ -267,7 +366,7 @@ export function Blast() {
 
     // --- light: flash peak, decays to the lingering ground fire, flickers ---
     const flick = 0.85 + 0.15 * Math.sin(clock.elapsedTime * 37) * Math.sin(clock.elapsedTime * 23 + 1)
-    light.current.intensity = fade * (900 * Math.exp(-a * 3.0) * Math.min(1, a * 30) + 110 * Math.exp(-a * 0.25)) * flick
+    light.current.intensity = fade * (480 * Math.exp(-a * 3.0) * Math.min(1, a * 30) + 95 * Math.exp(-a * 0.25)) * flick
     light.current.position.set(root.current.position.x, 2.4 + Math.min(a, 2) * 1.2, 0.3)
 
     // --- sparks ---
@@ -343,6 +442,72 @@ export function Blast() {
     r.flameMat.uniforms.uTime.value = clock.elapsedTime * Math.max(transient.ts, 0.35)
     r.flameMat.uniforms.uOpacity.value = fade * Math.min(1, Math.max(0, (a - 0.3) * 3)) * (0.45 + 0.55 * Math.exp(-a * 0.3))
     r.scorchMat.opacity = fade * Math.min(0.9, a * 4)
+
+    // --- secondary bursts (smaller, delayed, offset): the explosion propagates instead of being one ball ---
+    SECONDARY.forEach((b, i) => {
+      const u = r.secondary[i].uniforms, ab = a - b.delay, m = secBoxes.current[i]
+      if (!m) return
+      m.visible = ab >= 0
+      if (ab < 0) return
+      u.uAge.value = ab
+      u.uSteps.value = Math.round(18 + 14 * q)
+      u.uOpacity.value = fade * Math.min(1, ab * 25)
+      tmp.m.copy(m.matrixWorld).invert()
+      u.uCamObj.value.copy(camera.position).applyMatrix4(tmp.m)
+    })
+
+    // --- burning comets: ballistic chunks with a fire trail (points) and a smoke trail (sprites) ---
+    const cp = r.cometGeo.attributes.position as THREE.BufferAttribute, cl = r.cometGeo.attributes.aLife as THREE.BufferAttribute
+    const csP = r.cometSmokeGeo.attributes.iPos as THREE.InstancedBufferAttribute, csD = r.cometSmokeGeo.attributes.iData as THREE.InstancedBufferAttribute
+    for (let i = 0; i < N_COMET; i++) {
+      const c = r.comets[i]
+      for (let k = 0; k < TRAIL; k++) {
+        const idx = i * TRAIL + k, tk = a - k * 0.045
+        if (tk < 0) { cl.setX(idx, 0); csD.setXYZW(idx, 0, 0, 0, 0); continue }
+        const y = 1.4 + c.v.y * tk - 0.5 * G * tk * tk
+        if (y < 0) { cl.setX(idx, 0); csD.setXYZW(idx, 0, 0, 0, 0); continue }
+        cp.setXYZ(idx, c.v.x * tk, y, c.v.z * tk)
+        const burning = Math.max(0, 1 - a / c.burn)
+        cl.setX(idx, burning * (1 - k / TRAIL))
+        // smoke lags behind the flame and grows as it ages
+        const age = k * 0.045 + a * 0.15
+        csP.setXYZ(idx, c.v.x * tk, y + age * 0.6, c.v.z * tk)
+        csD.setXYZW(idx, 0.35 + age * 3.2, k * 1.7, Math.min(1, a * 5) * (1 - k / TRAIL) * 0.55 * (0.4 + 0.6 * burning), burning * 0.5)
+      }
+    }
+    cp.needsUpdate = cl.needsUpdate = csP.needsUpdate = csD.needsUpdate = true
+    r.cometMat.uniforms.uOpacity.value = fade
+    r.cometMat.uniforms.uTime.value = clock.elapsedTime
+
+    // --- embers: lingering sparks floating up on the heat, drifting and flickering ---
+    const ep = r.emberGeo.attributes.position as THREE.BufferAttribute, el = r.emberGeo.attributes.aLife as THREE.BufferAttribute
+    const nEmber = Math.round(N_EMBER * (0.5 + 0.5 * q))
+    for (let i = 0; i < N_EMBER; i++) {
+      const e = r.embers[i], t = a - e.t0
+      if (t < 0 || t > e.life || i >= nEmber) { el.setX(i, 0); continue }
+      const rr = e.r + t * 0.6
+      ep.setXYZ(i, Math.cos(e.a) * rr + Math.sin(t * 2 + e.ph) * 0.5, 0.8 + e.up * t + Math.sin(t * 3 + e.ph) * 0.2, Math.sin(e.a) * rr + Math.cos(t * 1.7 + e.ph) * 0.5)
+      el.setX(i, (1 - t / e.life) * Math.min(1, t * 4))
+    }
+    ep.needsUpdate = el.needsUpdate = true
+    r.emberMat.uniforms.uOpacity.value = fade
+    r.emberMat.uniforms.uTime.value = clock.elapsedTime
+
+    // --- dust curtain pushed out by the shockwave ---
+    const cr = 1.5 + 17 * (1 - Math.exp(-a * 1.9))
+    curtain.current.scale.set(cr, 1.2 + 2.6 * Math.min(1, a * 1.5), cr)
+    r.curtainMat.uniforms.uA.value = fade * Math.min(1, a * 6) * Math.exp(-a * 0.7)
+    r.curtainMat.uniforms.uAge.value = a
+    r.curtainMat.uniforms.uLit.value = Math.exp(-a * 1.6)
+
+    // --- anamorphic lens flare at detonation (and a faint one while the fire burns) ---
+    flare.current.position.set(0, 2.6, 0)
+    r.flareMat.opacity = fade * (Math.min(1, a * 40) * Math.exp(-a * 4.5) * 1.0 + 0.12 * Math.exp(-a * 0.5))
+    const fs = 26 + 30 * Math.exp(-a * 3)
+    flare.current.scale.set(fs, fs * 0.09, 1)
+
+    // sky / cloud glow from the fire (read by RaceTrack's sky shader)
+    transient.blastGlow = fade * (0.8 * Math.min(1, a * 20) * Math.exp(-a * 1.8) + 0.16 * Math.exp(-a * 0.3))
   })
 
   return (
@@ -366,6 +531,18 @@ export function Blast() {
       <mesh geometry={r.smokeGeo} material={r.smokeMat} frustumCulled={false} renderOrder={5} />
       <mesh geometry={r.flameGeo} material={r.flameMat} frustumCulled={false} renderOrder={6} />
       <points geometry={r.sparkGeo} material={r.sparkMat} frustumCulled={false} renderOrder={7} />
+      {SECONDARY.map((b, i) => (
+        <mesh key={i} ref={el => { if (el) secBoxes.current[i] = el }} position={[b.off[0], b.half, b.off[2]]} scale={b.half * 2} material={r.secondary[i]} frustumCulled={false} renderOrder={4}>
+          <boxGeometry args={[1, 1, 1]} />
+        </mesh>
+      ))}
+      <mesh ref={curtain} position-y={0} material={r.curtainMat} frustumCulled={false} renderOrder={3}>
+        <cylinderGeometry args={[1, 1, 1, 64, 1, true]} />
+      </mesh>
+      <mesh geometry={r.cometSmokeGeo} material={r.smokeMat} frustumCulled={false} renderOrder={5} />
+      <points geometry={r.cometGeo} material={r.cometMat} frustumCulled={false} renderOrder={7} />
+      <points geometry={r.emberGeo} material={r.emberMat} frustumCulled={false} renderOrder={7} />
+      <sprite ref={flare} material={r.flareMat} renderOrder={20} />
     </group>
     </>
   )
@@ -386,9 +563,19 @@ export function Landing() {
     geo.setAttribute('iPos', new THREE.InstancedBufferAttribute(new Float32Array(N * 3), 3))
     geo.setAttribute('iData', new THREE.InstancedBufferAttribute(new Float32Array(N * 4), 4))
     const seeds = Array.from({ length: N }, (_, i) => ({ a: (i / N) * Math.PI * 2 + rnd() * 0.2, sp: 3.5 + rnd() * 2.5, s1: 1.2 + rnd() * 1.4, rot: rnd() * 6 }))
-    return { puff, dustMat, ringMat, geo, seeds, N }
+    // plank scrape sparks: the floor bottoms out on touchdown
+    const NS = 150
+    const sparkMat = sparkMaterial()
+    const sparkGeo = new THREE.BufferGeometry()
+    sparkGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(NS * 3), 3))
+    sparkGeo.setAttribute('aLife', new THREE.BufferAttribute(new Float32Array(NS), 1))
+    const sparks = Array.from({ length: NS }, () => {
+      const side = rnd() < 0.5 ? -1 : 1
+      return { x: -1.6 + rnd() * 3.2, z: (rnd() - 0.5) * 0.5, v: new THREE.Vector3((rnd() - 0.5) * 5, 1 + rnd() * 3.5, side * (3 + rnd() * 6)), life: 0.35 + rnd() * 0.6, delay: rnd() * 0.12 }
+    })
+    return { puff, dustMat, ringMat, geo, seeds, N, NS, sparkMat, sparkGeo, sparks }
   }, [])
-  useEffect(() => () => { r.puff.dispose(); r.dustMat.dispose(); r.ringMat.dispose(); r.geo.dispose() }, [r])
+  useEffect(() => () => { r.puff.dispose(); r.dustMat.dispose(); r.ringMat.dispose(); r.geo.dispose(); r.sparkMat.dispose(); r.sparkGeo.dispose() }, [r])
   useEffect(() => { r.ringMat.uniforms.uColor.value.set(LIVERIES[livery].accent).multiplyScalar(2.2) }, [r, livery])
 
   const root = useRef<THREE.Group>(null!)
@@ -408,6 +595,14 @@ export function Landing() {
     const ra = Math.min(1, a / 0.9)
     r.ringMat.uniforms.uR.value = 1 - Math.pow(1 - ra, 2.4)
     r.ringMat.uniforms.uA.value = (1 - ra) * Math.min(1, a * 30)
+    const sp = r.sparkGeo.attributes.position as THREE.BufferAttribute, sl = r.sparkGeo.attributes.aLife as THREE.BufferAttribute
+    for (let i = 0; i < r.NS; i++) {
+      const s = r.sparks[i], t = a - s.delay
+      if (t < 0 || t > s.life) { sl.setX(i, 0); continue }
+      sp.setXYZ(i, s.x + s.v.x * t, Math.max(0.02, 0.05 + s.v.y * t - 0.5 * G * t * t), s.z + s.v.z * t)
+      sl.setX(i, 1 - t / s.life)
+    }
+    sp.needsUpdate = sl.needsUpdate = true
   })
   return (
     <group ref={root} visible={false}>
@@ -415,6 +610,48 @@ export function Landing() {
         <planeGeometry args={[9, 9]} />
       </mesh>
       <mesh geometry={r.geo} material={r.dustMat} frustumCulled={false} renderOrder={3} />
+      <points geometry={r.sparkGeo} material={r.sparkMat} frustumCulled={false} renderOrder={7} />
     </group>
   )
+}
+
+/** Launch: the rear tyres light up, white smoke pours off them and is left behind on the track. */
+export function LaunchSmoke() {
+  const r = useMemo(() => {
+    const rnd = prng(19)
+    const puff = puffTexture()
+    const mat = spriteMaterial(puff, new THREE.Color(0.42, 0.42, 0.44), new THREE.Color(0, 0, 0))
+    const N = 70
+    const geo = new THREE.InstancedBufferGeometry().copy(new THREE.PlaneGeometry(1, 1) as unknown as THREE.InstancedBufferGeometry)
+    geo.instanceCount = N
+    geo.setAttribute('iPos', new THREE.InstancedBufferAttribute(new Float32Array(N * 3), 3))
+    geo.setAttribute('iData', new THREE.InstancedBufferAttribute(new Float32Array(N * 4), 4))
+    const seeds = Array.from({ length: N }, (_, i) => ({
+      te: T.launch - 0.2 + (i / N) * 1.2, side: i % 2 ? 1 : -1, dz: (rnd() - 0.5) * 0.4, up: 0.3 + rnd() * 0.5, s1: 2 + rnd() * 2, rot: rnd() * 6,
+    }))
+    const emitDist = new Float32Array(N).fill(NaN)
+    return { puff, mat, geo, seeds, N, emitDist }
+  }, [])
+  useEffect(() => () => { r.puff.dispose(); r.mat.dispose(); r.geo.dispose() }, [r])
+  const mesh = useRef<THREE.Mesh>(null!)
+  useFrame(() => {
+    const cine = isCine(useStore.getState().phase)
+    const warm = transient.warm > 0
+    const t = transient.cineT
+    mesh.current.visible = warm || (cine && t > T.launch - 0.3 && t < T.launch + 4)
+    if (!mesh.current.visible) { r.emitDist.fill(NaN); return }
+    const P = r.geo.attributes.iPos as THREE.InstancedBufferAttribute, D = r.geo.attributes.iData as THREE.InstancedBufferAttribute
+    for (let i = 0; i < r.N; i++) {
+      const s = r.seeds[i]
+      if (warm) { P.setXYZ(i, -2, 0.4, s.side * 0.8); D.setXYZW(i, 1, 0, 0.3, 0); continue }
+      if (t < s.te) { D.setXYZW(i, 0, 0, 0, 0); continue }
+      if (Number.isNaN(r.emitDist[i])) r.emitDist[i] = transient.dist
+      const age = t - s.te
+      const behind = transient.dist - r.emitDist[i]
+      P.setXYZ(i, transient.cx - 1.85 - behind * 0.92 - age * 0.6, 0.3 + s.up * age, s.side * (0.8 + age * 0.35) + s.dz)
+      D.setXYZW(i, 0.5 + s.s1 * (1 - Math.exp(-age * 1.2)), s.rot + age * 0.4, Math.min(1, age * 6) * Math.exp(-age * 0.9) * 0.5, 0)
+    }
+    P.needsUpdate = D.needsUpdate = true
+  })
+  return <mesh ref={mesh} geometry={r.geo} material={r.mat} frustumCulled={false} renderOrder={3} visible={false} />
 }
