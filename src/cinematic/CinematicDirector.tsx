@@ -193,7 +193,16 @@ export function CinematicDirector() {
     else if (t < T.chase) { cP.lerpVectors(shotTop(T.launch, rig.fit, a), shotChase(t, cx, b), k); cL.lerpVectors(lookCar, b.set(cx + 3, 0.5, 0), k) }
     else if (t < T.side) { shotChase(t, cx, cP); cL.set(cx + 3, 0.5, 0) }
     else if (t < T.over) { shotSide(t, cx, cP); cL.set(cx - 0.1, 0.42, 0) }
-    else if (t < T.hero) { shotOver(t, cx, cP); lookOver(cx, cL) }
+    else if (t < T.hero) {
+      shotOver(t, cx, cP)
+      lookOver(cx, cL)
+      // whip the aim back toward the detonation so the overhead shot catches the fireball erupting behind the car
+      if (transient.blastAge >= 0) {
+        const w = Math.min(1, transient.blastAge * 6)
+        cL.x += (transient.blastX - cL.x) * 0.45 * w
+        cL.y += 2.2 * w
+      }
+    }
     else if (t < T.land + 0.25) {
       shotHero(t, cx, cP)
       // look up at the car, leading it slightly as it rises
