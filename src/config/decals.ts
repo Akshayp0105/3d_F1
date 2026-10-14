@@ -22,7 +22,6 @@ const MOBIL = '/brand/mobil-1.png'
 const BYBIT = '/brand/bybit.png'
 const FORD = '/brand/ford-racing.png'
 const TAG = '/brand/tag-heuer.png'
-export const PZERO = '/brand/p-zero.png'
 
 const mirror = (d: DecalDef, part = d.part): DecalDef => ({
   ...d,

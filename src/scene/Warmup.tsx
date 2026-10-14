@@ -15,6 +15,9 @@ export function Warmup() {
     if (transient.ready) return
     if (frames.current < 0) {
       if (active || progress < 100) return
+      // loads can finish before the car (and the Pirelli wheels inside it) have mounted; compiling without them
+      // leaves their race-lighting programs to compile mid-sequence (multi-second stall at the blast)
+      if (!scene.getObjectByName('car') || !scene.getObjectByName('Tyre')) return
       frames.current = 0
     }
     const f = frames.current++

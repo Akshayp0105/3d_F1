@@ -1,14 +1,16 @@
-// Realistic 13" wheel internals replacing the STL's solid wheel disc: spoked magnesium rim, centre-lock hub and
-// nut, carbon brake disc (glows under braking). Rendered inside the wheel node so it spins; the caliper sits on the
-// (non-spinning) upright in the wheel's explode group.
+// Wheels: the supplied Pirelli P Zero wheel (public/models/tyre.glb, built by scripts/car/build-tyre.mjs) replaces
+// the STL's tyre and solid wheel disc. It's fitted per wheel to the STL tyre's size (the STL meshes stay, hidden, as
+// the fit reference), rendered inside the wheel node so it spins, with the car's glowing brake material on its disc.
+// The caliper sits on the (non-spinning) upright in the wheel's explode group.
 import { useMemo } from 'react'
+import { useGLTF } from '@react-three/drei'
 import * as THREE from 'three'
 import type { CarMaterials } from '@/three/materials'
-import { PZERO } from '@/config/decals'
-import type { Vec3 } from '@/config/parts'
-import { OneDecal } from './Decals'
 
-/** Outboard/inboard face z (wheel-local) from the tyre geometry. */
+export const TYRE_URL = '/models/tyre.glb'
+useGLTF.preload(TYRE_URL)
+
+/** Outboard/inboard face z (wheel-local) and radius from the STL tyre geometry. */
 export function wheelFaces(wheel: THREE.Object3D) {
   const box = new THREE.Box3()
   wheel.traverse(o => {
@@ -19,79 +21,70 @@ export function wheelFaces(wheel: THREE.Object3D) {
     }
   })
   const side = wheel.position.z > 0 ? 1 : -1
-  return { side, out: side > 0 ? box.max.z : box.min.z, inb: side > 0 ? box.min.z : box.max.z }
+  // the pivot is the true axle (fit-wheels.mjs); the STL box can be a few mm off-centre, so average the extents
+  const radius = (box.max.x - box.min.x + box.max.y - box.min.y) / 4
+  return { side, radius, out: side > 0 ? box.max.z : box.min.z, inb: side > 0 ? box.min.z : box.max.z }
 }
 
-const R_RIM = 0.198
+/** Model → wheel fit: uniform radial scale, axial scale to the STL tyre's width. */
+function useWheelFit(wheel: THREE.Object3D) {
+  const { scene } = useGLTF(TYRE_URL)
+  return useMemo(() => {
+    const { side, radius, out, inb } = wheelFaces(wheel)
+    const src = scene.getObjectByName('Tyre')!.userData as { radius: number; halfWidth: number }
+    const width = Math.abs(out - inb)
+    const kr = radius / src.radius, kz = width / (2 * src.halfWidth)
+    // brake disc (inboard, model z −0.075, radius 0.267) in wheel-local space
+    return { side, kr, kz, mid: (out + inb) / 2, discR: 0.267 * kr, discZ: (out + inb) / 2 - side * 0.075 * kz }
+  }, [wheel, scene])
+}
 
-export function WheelInternals({ wheel, m }: { wheel: THREE.Object3D; m: CarMaterials }) {
-  const { side, out, inb } = useMemo(() => wheelFaces(wheel), [wheel])
-  const width = Math.abs(out - inb)
-  const mid = (out + inb) / 2
-  const face = out - side * 0.035 // spoke plane, slightly inset from the tyre face
+export function PirelliWheel({ wheel, m }: { wheel: THREE.Object3D; m: CarMaterials }) {
+  const { scene } = useGLTF(TYRE_URL)
+  const fit = useWheelFit(wheel)
+  const object = useMemo(() => {
+    const o = scene.clone(true)
+    o.traverse(c => {
+      const mesh = c as THREE.Mesh
+      if (!mesh.isMesh) return
+      mesh.castShadow = true
+      mesh.receiveShadow = true
+      const mat = mesh.material as THREE.MeshStandardMaterial
+      // the car's brake disc material glows under braking (Car.tsx drives its emissive)
+      if (mat.name === 'disc') mesh.material = m.disc
+      // the source rubber reads dusty grey under the studio lights: near-black satin compound, finer grain.
+      // Absolute values (shared material, StrictMode re-runs this memo).
+      if (mat.map && mat.normalMap) {
+        mat.color.setScalar(0.55)
+        mat.roughness = 0.8
+        mat.normalScale.setScalar(0.55)
+      }
+    })
+    return o
+  }, [scene, m])
+  // +Z is the model's outboard face; left wheels turn 180° about Y (not mirrored, so the sidewall lettering reads right)
   return (
-    <group>
-      {/* rim barrel + outer lip */}
-      <mesh material={m.rimMetal} position={[0, 0, mid]} rotation-x={Math.PI / 2}>
-        <cylinderGeometry args={[R_RIM, R_RIM, width * 0.86, 56, 1, true]} />
-      </mesh>
-      <mesh material={m.rimMetal} position={[0, 0, out - side * 0.012]}>
-        <torusGeometry args={[R_RIM, 0.009, 8, 56]} />
-      </mesh>
-      {/* spokes */}
-      {Array.from({ length: 10 }, (_, k) => {
-        const a = (k / 10) * Math.PI * 2
-        const r0 = 0.055, r1 = R_RIM - 0.006, rm = (r0 + r1) / 2
-        return (
-          <mesh key={k} material={m.rimMetal} position={[Math.cos(a) * rm, Math.sin(a) * rm, face]} rotation-z={a} castShadow>
-            <boxGeometry args={[r1 - r0, 0.022, 0.014]} />
-          </mesh>
-        )
-      })}
-      {/* hub + centre-lock nut */}
-      <mesh material={m.rimMetal} position={[0, 0, face]} rotation-x={Math.PI / 2}>
-        <cylinderGeometry args={[0.062, 0.062, 0.04, 28]} />
-      </mesh>
-      <mesh material={m.accentMat} position={[0, 0, face + side * 0.026]} rotation-x={Math.PI / 2}>
-        <cylinderGeometry args={[0.034, 0.038, 0.03, 6]} />
-      </mesh>
-      {/* carbon brake disc, inboard of the spokes */}
-      <mesh material={m.disc} position={[0, 0, mid - side * 0.02]} rotation-x={Math.PI / 2}>
-        <cylinderGeometry args={[0.14, 0.14, 0.032, 48]} />
-      </mesh>
-    </group>
+    <primitive
+      object={object}
+      position={[0, 0, fit.mid]}
+      rotation={[0, fit.side > 0 ? 0 : Math.PI, 0]}
+      scale={[fit.kr, fit.kr, fit.kz]}
+    />
   )
 }
 
-/** Brake caliper on the upright (doesn't spin). Placed in the wheel's explode group at the wheel pivot. */
+/** Brake caliper on the upright (doesn't spin), straddling the disc's trailing edge. Placed in the wheel's explode
+ *  group at the wheel pivot. */
 export function Caliper({ wheel, m }: { wheel: THREE.Object3D; m: CarMaterials }) {
-  const { side, out, inb } = useMemo(() => wheelFaces(wheel), [wheel])
-  const mid = (out + inb) / 2
+  const { discR, discZ } = useWheelFit(wheel)
   const p = wheel.position
   const front = p.x > 0
   // trailing position on the disc: behind and above the axle
   const a = front ? Math.PI * 0.62 : Math.PI * 0.38
+  const r = discR - 0.012
   return (
-    <mesh material={m.caliper} position={[p.x + Math.cos(a) * 0.13, p.y + Math.sin(a) * 0.13, p.z + mid - side * 0.02]} rotation-z={a - Math.PI / 2} castShadow>
-      <boxGeometry args={[0.1, 0.045, 0.07]} />
+    <mesh material={m.caliper} position={[p.x + Math.cos(a) * r, p.y + Math.sin(a) * r, p.z + discZ]} rotation-z={a - Math.PI / 2} castShadow>
+      <boxGeometry args={[0.085, 0.04, 0.06]} />
     </mesh>
   )
-}
-
-/** Pirelli P Zero markings on the outboard sidewall (top + bottom, like the real tyre). Rendered inside the wheel
- *  node, so they spin with it; projected onto the tyre mesh in wheel-local space. */
-export function TyreDecals({ wheel, tyre }: { wheel: THREE.Object3D; tyre: THREE.Mesh }) {
-  const defs = useMemo(() => {
-    const { side, out } = wheelFaces(wheel)
-    return [1, -1].map(s => ({
-      id: `pzero-${s}`,
-      part: wheel.name,
-      src: PZERO,
-      position: [0, 0.296 * s, out] as Vec3,
-      normal: [0, 0, side] as Vec3,
-      up: [0, s, 0] as Vec3,
-      scale: [0.2, 0.05, 0.05] as Vec3,
-    }))
-  }, [wheel])
-  return <>{defs.map(d => <OneDecal key={d.id} def={d} mesh={tyre} />)}</>
 }

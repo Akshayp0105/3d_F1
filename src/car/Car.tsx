@@ -14,7 +14,7 @@ import { ss, damp } from '@/lib/math'
 import { createCarMaterials } from '@/three/materials'
 import { PowerUnit, Radiator } from './PowerUnit'
 import { FuelCell, Seat, DriverBody, SteeringWheel } from './Interior'
-import { WheelInternals, Caliper, TyreDecals } from './WheelAssembly'
+import { PirelliWheel, Caliper } from './WheelAssembly'
 import { PartDecals } from './Decals'
 import { carRefs } from './refs'
 
@@ -64,8 +64,8 @@ export function Car() {
         mesh.material = (m as unknown as Record<string, THREE.Material>)[key] ?? m.paint
         mesh.castShadow = true
         mesh.receiveShadow = true
-        // the STL's solid wheel disc is replaced by WheelInternals (spoked rim, hub, brake disc)
-        if (key === 'rim') mesh.visible = false
+        // the STL's tyre and solid wheel disc are replaced by the Pirelli wheel model (kept hidden: they're its fit reference)
+        if (key === 'rim' || key === 'tyre') mesh.visible = false
       })
       out[name] = { object: node, meshes }
     }
@@ -143,8 +143,7 @@ export function Car() {
         return (
           <ExplodablePart key={name} name={name} def={def}>
             {p && <primitive object={p.object} />}
-            {p && name.startsWith('Wheel_') && createPortal(<WheelInternals wheel={p.object} m={m} />, p.object)}
-            {p && name.startsWith('Wheel_') && p.meshes.tyre && createPortal(<TyreDecals wheel={p.object} tyre={p.meshes.tyre} />, p.object)}
+            {p && name.startsWith('Wheel_') && createPortal(<PirelliWheel wheel={p.object} m={m} />, p.object)}
             {p && name.startsWith('Wheel_') && <Caliper wheel={p.object} m={m} />}
             {extra[name]}
             {p && <PartDecals part={name} meshes={p.meshes} />}

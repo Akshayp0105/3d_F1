@@ -17,6 +17,7 @@ the licensed RB16B mesh, a Red Bull livery and decals, pan, and a dark studio wi
 | `npm run build` | typecheck + production build |
 | `npm run build:car` | rebuild `public/models/rb16b.glb` from `assets-src/RB16B_FIXED!.stl` |
 | `npm run build:engine` | rebuild `public/models/engine.glb` from `assets-src/f1_engine_exposed_reconstruction.glb` |
+| `npm run build:tyre` | rebuild `public/models/tyre.glb` from `assets-src/pirelli_f1_slick_tire_hub_cover.glb` |
 | `node scripts/car/fit-wheels.mjs` | fit true wheel centres from the tyre tread (if wheels ever wobble) |
 | `npm run shots` | headless-Edge screenshots of idle / exploded / views / launch frames → `shots/` (dev server must be running) |
 | `node scripts/dev/interact.mjs` | real-mouse smoke test: click-explode, double-click launch, skip, drag ≠ click |
@@ -76,8 +77,15 @@ Cavity sizes come from `scripts/car/probe-interior.mjs`. The shell is empty betw
     Stages register in `carRefs.parts` so labels can anchor to them.
 - `car/Interior.tsx`: `FuelCell` (bladder, energy store with HV band, rear bulkhead), `Seat`, `DriverBody` (suit, HANS, gloves),
   `SteeringWheel` (live canvas dash: rev LEDs, gear, speed from `transient`).
-- `car/WheelAssembly.tsx`: the STL's solid wheel discs (`rim` primitive) are hidden. Instead: spoked 13" rim, hub, centre-lock nut,
-  carbon brake disc (emissive under braking) spinning with the wheel, plus a static caliper on the upright.
+- `car/WheelAssembly.tsx`: the STL's tyres and solid wheel discs (`tyre` / `rim` primitives) are hidden but kept as the fit reference.
+  Instead each wheel gets the **supplied Pirelli wheel** (`public/models/tyre.glb`, built by `scripts/car/build-tyre.mjs`):
+  textured P Zero slick (lettering + red soft-compound band in its texture), forged rim, carbon aero hub cover, inboard brake disc.
+  - **Build:** drops the calipers, the inboard hub cover/hub/spokes and the outboard disc; computes crease normals (the source has none);
+    simplifies (the tyre alone was ~200k tris) and compresses textures to WebP. Materials are not deduped (the `disc` copy must survive).
+  - **Fit:** uniform radial scale to the STL tyre radius, axial scale to its width. +Z is outboard; left wheels turn 180° about Y
+    (not mirrored, so the lettering reads correctly). The rubber is darkened at runtime (the source reads dusty grey).
+  - The disc uses the car's `disc` material (emissive under braking) and spins with the wheel. A static caliper on the
+    upright straddles the disc edge.
 - Inner faces of cut paint panels render as triplanar carbon (paint shader, `!gl_FrontFacing`).
 - Exploded view pulls the camera back/up (`ORBIT.explodedPhi/explodedR`) and restores it on reassembly.
 
@@ -171,7 +179,7 @@ The AudioContext unlocks inside the launch gesture (`state/actions.ts`).
   slowly once the heads lift in the exploded view and at engine rpm while running.
 - **Exterior:** sponsor wordmarks from the supplied Oracle model (`scripts/car/extract-decals.mjs` → `public/brand/*.png`)
   are projected via `config/decals.ts`: Oracle (sidepods, rear-wing top), TAG Heuer (nose), Mobil 1, Bybit (floor edge), Ford
-  (rear endplates) and Pirelli P Zero on every tyre sidewall (`TyreDecals`, spins with the wheel). N8AO ambient occlusion.
+  (rear endplates). Tyre markings come from the Pirelli wheel model's texture. N8AO ambient occlusion.
 - **Studio** (`scene/Showroom.tsx`): reflective turntable (drei `MeshReflectorMaterial`), cyclorama gradient wall, two curved
   team LED walls (texture U mirrored, since they're viewed from inside), vertical light strips (also added as environment
   Lightformers, so they reflect on the paint), overhead truss + softboxes, a volumetric spotlight.
@@ -183,6 +191,8 @@ The AudioContext unlocks inside the launch gesture (`state/actions.ts`).
   - drei's reflector re-renders the whole scene every frame even when hidden, so it is only mounted outside the launch sequence.
   - `scene/Warmup.tsx`: after load and behind the loader, renders the race state (mix 1, then 0.5) and runs `gl.compile`.
     The loader waits for `transient.ready`. Result: race went from 5 fps (multi-second compile stalls) to 144 fps.
+    It also waits until the car and the Pirelli wheels are in the scene: loads can finish before they mount, and compiling
+    without them caused an intermittent 6 s stall at the blast.
   - Dev builds expose the renderer as `window.__gl` for these scripts.
 
 ## Realism pass 4 (body + stadium)
@@ -256,3 +266,19 @@ This was built from the written description, on the Red Bull car.
 - **Camera:** a dutch tilt in the hero shot and rotational shake. The overhead shot whips its aim toward the detonation.
   DOF eases to 0.2 during the overhead shot so the blast isn't a blurred disc.
 - **Measured:** blast window avg ~113 fps, p95 12.6 ms (headless Edge).
+
+### Blast realism pass 3 (less "game", more clarity)
+- **Fireball** (`fireball.ts`): billow (`1-|2n-1|`) noise carves cauliflower puffs with crisp creases. Density edges are much
+  sharper, the burn is higher-contrast (hot pockets, dark folds) and the soot is darker. Steps go up to 32 + 30·quality, and a
+  per-pixel jittered ray start hides slicing.
+- **Sparks:** velocity-aligned streaks (`lineSegments`, one shutter-time long, `SPARK_SHUTTER`) instead of round dots. There are
+  fewer of them (180), they are shorter-lived, and they fade near the lens so close passes don't become defocused bars.
+- **Debris:** small, thin, dark charred shards (not orange flakes), slower so they don't fly into the camera.
+- **Removed the game look:**
+  - Ground flames are domain-warped ragged tongues, not teardrops.
+  - The shockwave ring is a faint dust ripple.
+  - The lens flare is brief and narrower, with no lingering band.
+  - Embers are half as many and smaller.
+  - The smoke-puff texture has billowy structure.
+- **Post:** chromatic aberration is about a third of what it was, the flash is 0.3, the haze is weaker, and DOF in the hero shot is 0.45.
+- **Measured:** blast window ~59 fps vs a 60 fps baseline on the same machine (headless Edge), with no mid-sequence compiles.
