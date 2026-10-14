@@ -13,9 +13,11 @@ import { createFireballMaterial, FB_HALF } from './fireball'
 import { T } from '@/config/timeline'
 import { isCine } from '@/state/machine'
 
-const N_SPARK = 340, N_DEBRIS = 64, N_SMOKE = 46, N_DUST = 36, N_FLAME = 14
+const N_SPARK = 180, N_DEBRIS = 56, N_SMOKE = 46, N_DUST = 36, N_FLAME = 10
+/** spark streak length, in seconds of flight (a camera shutter smearing the hot particle into a line) */
+const SPARK_SHUTTER = 0.02
 /** burning debris "comets": fire trail (points) + smoke trail (sprites) */
-const N_COMET = 9, TRAIL = 14, N_EMBER = 180
+const N_COMET = 9, TRAIL = 14, N_EMBER = 90
 /** secondary bursts: offset (m, blast-local), delay (s of blast clock), scale, seed */
 const SECONDARY = [
   { off: [-4.2, 0, -4.6] as const, delay: 0.32, scale: 0.48, seed: 0.71, half: 6 },
@@ -29,26 +31,32 @@ function prng(seed: number) {
   return () => ((s = (s * 16807) % 2147483647) / 2147483647)
 }
 
-/** Soft, noisy smoke puff (alpha) */
+/** Smoke puff (alpha): billowy (|2n−1| folded) value noise inside a round falloff, so sprites read as smoke with
+ *  cauliflower structure instead of blurry discs. */
 function puffTexture() {
+  const N = 256, G0 = 16
   const c = document.createElement('canvas')
-  c.width = c.height = 128
+  c.width = c.height = N
   const g = c.getContext('2d')!
   const rnd = prng(11)
-  for (let i = 0; i < 26; i++) {
-    const x = 64 + (rnd() - 0.5) * 50, y = 64 + (rnd() - 0.5) * 50, r = 18 + rnd() * 26
-    const gr = g.createRadialGradient(x, y, 0, x, y, r)
-    gr.addColorStop(0, `rgba(255,255,255,${0.28 + rnd() * 0.2})`)
-    gr.addColorStop(1, 'rgba(255,255,255,0)')
-    g.fillStyle = gr
-    g.fillRect(0, 0, 128, 128)
+  const grid = Array.from({ length: G0 * G0 }, () => rnd())
+  const at = (i: number, j: number) => grid[(j % G0) * G0 + (i % G0)]
+  const vnoise = (x: number, y: number) => {
+    const ix = Math.floor(x), iy = Math.floor(y), fx = x - ix, fy = y - iy
+    const sx = fx * fx * (3 - 2 * fx), sy = fy * fy * (3 - 2 * fy)
+    return (at(ix, iy) * (1 - sx) + at(ix + 1, iy) * sx) * (1 - sy) + (at(ix, iy + 1) * (1 - sx) + at(ix + 1, iy + 1) * sx) * sy
   }
-  // fade the square's edges
-  const id = g.getImageData(0, 0, 128, 128)
-  for (let y = 0; y < 128; y++)
-    for (let x = 0; x < 128; x++) {
-      const d = Math.hypot(x - 64, y - 64) / 64
-      id.data[(y * 128 + x) * 4 + 3] *= Math.max(0, 1 - d * d)
+  const id = g.createImageData(N, N)
+  for (let y = 0; y < N; y++)
+    for (let x = 0; x < N; x++) {
+      const u = x / N, v = y / N
+      let n = 0, amp = 0.5, f = 3
+      for (let o = 0; o < 5; o++) { n += amp * (1 - Math.abs(vnoise(u * f + o * 3.1, v * f + o * 1.7) * 2 - 1)); f *= 2; amp *= 0.5 }
+      const d = Math.hypot(u - 0.5, v - 0.5) * 2
+      const a = Math.max(0, Math.min(1, (1 - d * d) * 1.5 + (n - 0.62) * 1.8)) * Math.max(0, 1 - d)
+      const i = (y * N + x) * 4
+      id.data[i] = id.data[i + 1] = id.data[i + 2] = 255
+      id.data[i + 3] = Math.round(230 * a)
     }
   g.putImageData(id, 0, 0)
   return new THREE.CanvasTexture(c)
@@ -131,15 +139,18 @@ function flameMaterial() {
       float fbm(vec2 p){ float v = 0.0, a = 0.5; for (int k = 0; k < 4; k++){ v += a*n(p); p *= 2.1; a *= 0.5; } return v; }
       void main(){
         vec2 uv = vUv;
-        // licking flame: turbulence rising faster than the base, tongues breaking off toward the top
-        float f = fbm(vec2(uv.x * 4.0 + vSeed, uv.y * 3.0 - uTime * 3.2 + vSeed * 3.0));
-        float g = fbm(vec2(uv.x * 9.0 - vSeed, uv.y * 6.0 - uTime * 5.0));
-        float x = (uv.x - 0.5) + (f - 0.5) * 0.35 * uv.y;
-        float shape = 1.0 - smoothstep(0.08, 0.5, abs(x) * (1.6 + uv.y * 2.6));
-        float heat = shape * pow(1.0 - uv.y, 0.7) * (0.45 + 0.9 * f) + (g - 0.5) * 0.25 - uv.y * 0.35;
-        float a = smoothstep(0.12, 0.45, heat);
-        vec3 c = mix(vec3(0.5, 0.04, 0.0) * 1.2, vec3(1.0, 0.36, 0.04) * 2.4, smoothstep(0.2, 0.55, heat));
-        c = mix(c, vec3(1.0, 0.72, 0.35) * 3.4, smoothstep(0.6, 0.9, heat));
+        // turbulent fire: domain-warped noise rising fast and eroded by height, so the flame breaks into ragged,
+        // separated tongues with dark gaps instead of one symmetric teardrop
+        vec2 p = vec2(uv.x * 2.2 + vSeed, uv.y * 1.6 - uTime * 2.4 + vSeed * 3.0);
+        vec2 w = vec2(fbm(p * 1.3 + 4.1), fbm(p * 1.3 - 2.7)) - 0.5;
+        float f = fbm(p * 2.4 + w * 1.8);
+        float g = fbm(vec2(uv.x * 7.0 - vSeed, uv.y * 4.0 - uTime * 4.6) + w);
+        float x = uv.x - 0.5 + w.x * 0.45 * uv.y;
+        float base = exp(-x * x * 18.0) * (1.0 - smoothstep(0.0, 1.0, uv.y)) * smoothstep(0.0, 0.08, uv.y);
+        float heat = base * (0.35 + f * 1.1) + (g - 0.5) * 0.3 * base - uv.y * 0.18;
+        float a = smoothstep(0.16, 0.42, heat);
+        vec3 c = mix(vec3(0.38, 0.03, 0.0), vec3(1.0, 0.3, 0.03) * 2.2, smoothstep(0.2, 0.5, heat));
+        c = mix(c, vec3(1.0, 0.68, 0.3) * 3.6, smoothstep(0.55, 0.85, heat));
         gl_FragColor = vec4(c * a * uOpacity, 1.0);
       }`,
   })
@@ -164,6 +175,32 @@ function sparkMaterial() {
   })
 }
 
+/** Spark streaks: one line segment per spark, from where it was one shutter-time ago to where it is now (motion
+ *  blur), so sparks read as hot directional streaks instead of round dots. aHead is 1 at the head, 0 at the tail. */
+function streakMaterial() {
+  return new THREE.ShaderMaterial({
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    uniforms: { uOpacity: { value: 1 } },
+    vertexShader: /* glsl */ `
+      attribute float aLife; attribute float aHead; varying float vLife; varying float vHead; varying float vNear;
+      void main(){ vLife = aLife; vHead = aHead; vec4 mv = modelViewMatrix * vec4(position, 1.0); gl_Position = projectionMatrix * mv;
+        // sparks flying right past the lens would be huge defocused bars: fade them out near the camera
+        vNear = smoothstep(2.0, 5.0, -mv.z); }`,
+    fragmentShader: /* glsl */ `
+      uniform float uOpacity; varying float vLife; varying float vHead; varying float vNear;
+      void main(){
+        if (vLife <= 0.0) discard;
+        float a = smoothstep(0.0, 0.2, vLife) * (0.12 + 0.88 * vHead) * vNear;
+        // cools from white-hot through yellow to deep orange as it flies
+        vec3 c = mix(vec3(1.6, 0.28, 0.04), vec3(4.2, 2.4, 0.9), smoothstep(0.35, 0.9, vLife));
+        c = mix(c, vec3(6.5, 5.2, 3.4), smoothstep(0.85, 1.0, vLife) * vHead);
+        gl_FragColor = vec4(c * a * uOpacity, a * uOpacity);
+      }`,
+  })
+}
+
 /** Comet fire trail + rising embers: like sparks but bigger, softer, cooler. */
 function trailMaterial(sizeBase: number, sizeLife: number) {
   return new THREE.ShaderMaterial({
@@ -179,7 +216,7 @@ function trailMaterial(sizeBase: number, sizeLife: number) {
     fragmentShader: /* glsl */ `
       uniform float uOpacity; varying float vLife;
       void main(){ float d = length(gl_PointCoord - 0.5); float a = (1.0 - smoothstep(0.0, 0.5, d)) * smoothstep(0.0, 0.2, vLife);
-        vec3 c = mix(vec3(1.6, 0.18, 0.02), vec3(4.5, 2.0, 0.6), smoothstep(0.35, 1.0, vLife));
+        vec3 c = mix(vec3(1.4, 0.16, 0.02), vec3(3.8, 1.6, 0.45), smoothstep(0.35, 1.0, vLife));
         gl_FragColor = vec4(c * a * uOpacity, a * uOpacity); }`,
   })
 }
@@ -255,11 +292,14 @@ export function Blast() {
     const smokeMat = spriteMaterial(puff, new THREE.Color(0.018, 0.016, 0.015), new THREE.Color(1.6, 0.55, 0.12))
     const dustMat = spriteMaterial(puff, new THREE.Color(0.2, 0.17, 0.13), new THREE.Color(0.6, 0.3, 0.1))
     const flameMat = flameMaterial()
-    const sparkMat = sparkMaterial()
+    const sparkMat = streakMaterial()
+    // pressure wave: a faint dusty ripple across the asphalt, not a glowing donut
     const ringMat = ringMaterial()
+    ringMat.uniforms.uColor.value.setRGB(0.22, 0.15, 0.1)
     const scorchMat = new THREE.MeshBasicMaterial({ map: scorch, transparent: true, depthWrite: false, color: 0x000000, polygonOffset: true, polygonOffsetFactor: -2 })
     scorchMat.alphaMap = scorch
-    const debrisMat = new THREE.MeshStandardMaterial({ color: '#1a1a1c', roughness: 0.6, metalness: 0.4, emissive: new THREE.Color('#ff5a14'), emissiveIntensity: 0 })
+    // charred carbon / alloy fragments: dark and a little specular (the fire light colours them enough)
+    const debrisMat = new THREE.MeshStandardMaterial({ color: '#08080a', roughness: 0.45, metalness: 0.55, emissive: new THREE.Color('#ff4a0c'), emissiveIntensity: 0, flatShading: true })
 
     // instanced sprite geometry helper
     const spriteGeo = (n: number) => {
@@ -276,26 +316,30 @@ export function Blast() {
     for (let i = 0; i < N_FLAME; i++) {
       const a = rnd() * Math.PI * 2, d = 1.2 + rnd() * 4.5
       fpos.set([Math.cos(a) * d, 0, Math.sin(a) * d * 0.8], i * 3)
-      fdat.set([0.9 + rnd() * 1.2, 1.2 + rnd() * 2.2, rnd() * 10], i * 3)
+      fdat.set([1.0 + rnd() * 1.4, 0.9 + rnd() * 1.6, rnd() * 10], i * 3)
     }
     flameGeo.setAttribute('iPos', new THREE.InstancedBufferAttribute(fpos, 3))
     flameGeo.setAttribute('iData', new THREE.InstancedBufferAttribute(fdat, 3))
 
+    // two vertices per spark (tail, head) for the streak line segments
     const sparkGeo = new THREE.BufferGeometry()
-    sparkGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(N_SPARK * 3), 3))
-    sparkGeo.setAttribute('aLife', new THREE.BufferAttribute(new Float32Array(N_SPARK), 1))
+    sparkGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(N_SPARK * 6), 3))
+    sparkGeo.setAttribute('aLife', new THREE.BufferAttribute(new Float32Array(N_SPARK * 2), 1))
+    sparkGeo.setAttribute('aHead', new THREE.BufferAttribute(new Float32Array(N_SPARK * 2).map((_, i) => i % 2), 1))
 
     // particle seeds (velocities, lifetimes, spawn delays) — deterministic
     const sparks = Array.from({ length: N_SPARK }, () => {
       const a = rnd() * Math.PI * 2, el = 0.15 + rnd() * 1.25, sp = 9 + rnd() * 30
-      return { v: new THREE.Vector3(Math.cos(a) * Math.cos(el) * sp, Math.sin(el) * sp, Math.sin(a) * Math.cos(el) * sp), life: 0.7 + rnd() * 1.8, delay: rnd() * 0.25 }
+      return { v: new THREE.Vector3(Math.cos(a) * Math.cos(el) * sp, Math.sin(el) * sp, Math.sin(a) * Math.cos(el) * sp), life: 0.45 + rnd() * 1.1, delay: rnd() * 0.2 }
     })
     const debris = Array.from({ length: N_DEBRIS }, () => {
-      const a = rnd() * Math.PI * 2, el = 0.35 + rnd() * 1.0, sp = 7 + rnd() * 17
+      const a = rnd() * Math.PI * 2, el = 0.35 + rnd() * 1.0, sp = 5 + rnd() * 10
+      // mostly small thin shards, a few larger panels
+      const big = rnd() < 0.15 ? 2.2 : 1
       return {
         v: new THREE.Vector3(Math.cos(a) * Math.cos(el) * sp, Math.sin(el) * sp, Math.sin(a) * Math.cos(el) * sp),
         spin: new THREE.Vector3(rnd() - 0.5, rnd() - 0.5, rnd() - 0.5).multiplyScalar(18),
-        size: new THREE.Vector3(0.05 + rnd() * 0.18, 0.02 + rnd() * 0.05, 0.04 + rnd() * 0.14),
+        size: new THREE.Vector3((0.03 + rnd() * 0.08) * big, (0.006 + rnd() * 0.012) * big, (0.02 + rnd() * 0.06) * big),
       }
     })
     const smoke = Array.from({ length: N_SMOKE }, () => ({
@@ -305,7 +349,7 @@ export function Blast() {
     // --- realism pass 2: secondary bursts, burning comets, embers, dust curtain, lens flare ---
     const secondary = SECONDARY.map(b => createFireballMaterial({ half: b.half, scale: b.scale, seed: b.seed, heat: 0.9 }))
     const cometMat = trailMaterial(26, 70)
-    const emberMat = trailMaterial(6, 12)
+    const emberMat = trailMaterial(3, 6)
     const cometGeo = new THREE.BufferGeometry()
     cometGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(N_COMET * TRAIL * 3), 3))
     cometGeo.setAttribute('aLife', new THREE.BufferAttribute(new Float32Array(N_COMET * TRAIL), 1))
@@ -359,7 +403,7 @@ export function Blast() {
     // --- fireball volume ---
     const fb = r.fireball.uniforms
     fb.uAge.value = a
-    fb.uSteps.value = Math.round(24 + 22 * q)
+    fb.uSteps.value = Math.round(32 + 30 * q)
     fb.uOpacity.value = fade * Math.min(1, a * 25)
     tmp.m.copy(box.current.matrixWorld).invert()
     fb.uCamObj.value.copy(camera.position).applyMatrix4(tmp.m)
@@ -372,15 +416,19 @@ export function Blast() {
     // --- sparks ---
     const sp = r.sparkGeo.attributes.position as THREE.BufferAttribute, life = r.sparkGeo.attributes.aLife as THREE.BufferAttribute
     const nSpark = Math.round(N_SPARK * (0.5 + 0.5 * q))
-    for (let i = 0; i < N_SPARK; i++) {
-      const s = r.sparks[i], t = a - s.delay
-      if (t < 0 || i >= nSpark || t > s.life) { life.setX(i, 0); continue }
-      const drag = Math.exp(-t * 0.6)
-      const k = (1 - drag) / 0.6
+    const sparkAt = (s: (typeof r.sparks)[number], t: number, j: number) => {
+      const k = (1 - Math.exp(-t * 0.6)) / 0.6
       let y = 1.2 + s.v.y * k - 0.5 * G * t * t
       if (y < 0.02) y = 0.02 + Math.abs(y) * 0.15
-      sp.setXYZ(i, s.v.x * k, y, s.v.z * k)
-      life.setX(i, 1 - t / s.life)
+      sp.setXYZ(j, s.v.x * k, y, s.v.z * k)
+    }
+    for (let i = 0; i < N_SPARK; i++) {
+      const s = r.sparks[i], t = a - s.delay
+      if (t < 0 || i >= nSpark || t > s.life) { life.setX(2 * i, 0); life.setX(2 * i + 1, 0); continue }
+      sparkAt(s, Math.max(0, t - SPARK_SHUTTER), 2 * i)
+      sparkAt(s, t, 2 * i + 1)
+      life.setX(2 * i, 1 - t / s.life)
+      life.setX(2 * i + 1, 1 - t / s.life)
     }
     sp.needsUpdate = life.needsUpdate = true
     r.sparkMat.uniforms.uOpacity.value = fade
@@ -404,7 +452,7 @@ export function Blast() {
     }
     debrisMesh.current.instanceMatrix.needsUpdate = true
     // charred chunks; only a faint ember glow that dies quickly
-    r.debrisMat.emissiveIntensity = 0.6 * Math.exp(-a * 2.5)
+    r.debrisMat.emissiveIntensity = 0.35 * Math.exp(-a * 3.5)
     r.debrisMat.opacity = fade
     r.debrisMat.transparent = true
 
@@ -437,7 +485,7 @@ export function Blast() {
     // --- shockwave ring (fast), ground fire (lingers), scorch ---
     const ra = Math.min(1, a / 0.7)
     r.ringMat.uniforms.uR.value = 1 - Math.pow(1 - ra, 2)
-    r.ringMat.uniforms.uA.value = fade * (1 - ra) * Math.min(1, a * 40)
+    r.ringMat.uniforms.uA.value = fade * (1 - ra) * (1 - ra) * Math.min(1, a * 40)
     ring.current.visible = a < 0.7
     r.flameMat.uniforms.uTime.value = clock.elapsedTime * Math.max(transient.ts, 0.35)
     r.flameMat.uniforms.uOpacity.value = fade * Math.min(1, Math.max(0, (a - 0.3) * 3)) * (0.45 + 0.55 * Math.exp(-a * 0.3))
@@ -450,7 +498,7 @@ export function Blast() {
       m.visible = ab >= 0
       if (ab < 0) return
       u.uAge.value = ab
-      u.uSteps.value = Math.round(18 + 14 * q)
+      u.uSteps.value = Math.round(22 + 20 * q)
       u.uOpacity.value = fade * Math.min(1, ab * 25)
       tmp.m.copy(m.matrixWorld).invert()
       u.uCamObj.value.copy(camera.position).applyMatrix4(tmp.m)
@@ -502,8 +550,8 @@ export function Blast() {
 
     // --- anamorphic lens flare at detonation (and a faint one while the fire burns) ---
     flare.current.position.set(0, 2.6, 0)
-    r.flareMat.opacity = fade * (Math.min(1, a * 40) * Math.exp(-a * 4.5) * 1.0 + 0.12 * Math.exp(-a * 0.5))
-    const fs = 26 + 30 * Math.exp(-a * 3)
+    r.flareMat.opacity = fade * Math.min(1, a * 40) * Math.exp(-a * 7) * 0.55
+    const fs = 14 + 18 * Math.exp(-a * 3)
     flare.current.scale.set(fs, fs * 0.09, 1)
 
     // sky / cloud glow from the fire (read by RaceTrack's sky shader)
@@ -530,7 +578,7 @@ export function Blast() {
       </mesh>
       <mesh geometry={r.smokeGeo} material={r.smokeMat} frustumCulled={false} renderOrder={5} />
       <mesh geometry={r.flameGeo} material={r.flameMat} frustumCulled={false} renderOrder={6} />
-      <points geometry={r.sparkGeo} material={r.sparkMat} frustumCulled={false} renderOrder={7} />
+      <lineSegments geometry={r.sparkGeo} material={r.sparkMat} frustumCulled={false} renderOrder={7} />
       {SECONDARY.map((b, i) => (
         <mesh key={i} ref={el => { if (el) secBoxes.current[i] = el }} position={[b.off[0], b.half, b.off[2]]} scale={b.half * 2} material={r.secondary[i]} frustumCulled={false} renderOrder={4}>
           <boxGeometry args={[1, 1, 1]} />
