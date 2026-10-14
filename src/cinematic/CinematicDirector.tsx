@@ -84,10 +84,10 @@ export function CinematicDirector() {
     to({ pitch: -0.018, duration: 0.12, ease: 'power2.out' }, T.land)
     to({ pitch: 0, duration: 0.5, ease: 'sine.inOut' }, T.land + 0.12)
     // blast post fx: flash, chromatic spike, FOV punch, shake, heat haze
-    to({ flash: 0.55, duration: 0.03, ease: 'none' }, T.blast)
+    to({ flash: 0.3, duration: 0.03, ease: 'none' }, T.blast)
     to({ flash: 0, duration: 0.42, ease: 'power2.out' }, T.blast + 0.03)
     to({ ca: 1, duration: 0.05, ease: 'none' }, T.blast)
-    to({ ca: 0, duration: 1.0, ease: 'power2.out' }, T.blast + 0.05)
+    to({ ca: 0, duration: 0.6, ease: 'power2.out' }, T.blast + 0.05)
     to({ fov: 16, duration: 0.07, ease: 'power2.out' }, T.blast)
     to({ fov: 0, duration: 1.3, ease: 'power3.out' }, T.blast + 0.07)
     to({ shake: 1, duration: 0.03, ease: 'none' }, T.blast)
@@ -101,7 +101,8 @@ export function CinematicDirector() {
     to({ dof: 0, grain: 0, vig: 0, duration: 1.0, ease: 'power1.inOut' }, T.home - 0.6)
     // keep the explosion readable in the overhead shot: shallow focus would melt it into a blurred disc
     to({ dof: 0.2, duration: 0.4, ease: 'power1.inOut' }, T.over)
-    to({ dof: 1, duration: 0.6, ease: 'power1.inOut' }, T.hero)
+    to({ dof: 0.45, duration: 0.6, ease: 'power1.inOut' }, T.hero)
+    // the fireball stays legible behind the car in the hero shot (light focus falloff, not a blur)
     // events
     t.call(() => engineAudio.start(), [], T.ign)
     t.call(() => {

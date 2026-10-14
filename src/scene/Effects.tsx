@@ -26,7 +26,7 @@ class HeatHazeEffect extends Effect {
         float m = exp(-dot(d, d) / (uRadius * uRadius)) * smoothstep(-0.1, 0.05, uv.y - uCenter.y + uRadius * 0.6);
         vec2 n = vec2(sin(uv.y * 160.0 - time * 9.0) + 0.6 * sin(uv.y * 63.0 + uv.x * 40.0 - time * 5.0),
                       cos(uv.x * 140.0 + time * 7.0) + 0.5 * sin(uv.y * 95.0 - time * 11.0));
-        uv += n * 0.0016 * uStrength * m;
+        uv += n * 0.0011 * uStrength * m;
       }`,
       { uniforms: new Map<string, THREE.Uniform>([['uStrength', new THREE.Uniform(0)], ['uCenter', new THREE.Uniform(new THREE.Vector2(0.5, 0.5))], ['uRadius', new THREE.Uniform(0.35)]]) },
     )
@@ -47,7 +47,8 @@ export function Effects() {
     const cine = isCine(useStore.getState().phase)
     const k = cine && !reduceMotion ? transient.s * transient.m : 0
     const spike = cine ? transient.ca : 0
-    offset.set(0.0016 * k + 0.0045 * spike, 0.0009 * k + 0.003 * spike)
+    // kept subtle: strong RGB fringing reads as a video-game filter, not a lens
+    offset.set(0.0007 * k + 0.0014 * spike, 0.0004 * k + 0.0009 * spike)
     if (ca.current) ca.current.offset.copy(offset)
     // heat haze
     const hz = haze.uniforms.get('uStrength')!

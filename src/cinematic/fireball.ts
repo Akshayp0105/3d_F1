@@ -72,20 +72,25 @@ const glsl = /* glsl */ `
     vec3 wq = qs + (vec3(noise(qs * 0.21 + 3.1), noise(qs * 0.21 + 7.7), noise(qs * 0.21 + 1.3)) - 0.5) * 4.0;
     float n = fbm(wq * 0.42 + vec3(0.0, -a * 1.8, 0.0));
     float n2 = noise(wq * 1.6 + vec3(0.0, -a * 3.4, a)) * 0.6 + noise(wq * 3.4 - vec3(0.0, a * 4.0, 0.0)) * 0.4;
+    // billow (cauliflower) detail: |2n-1| folds the noise into rounded puffs with crisp creases, like real fireballs
+    float b1 = 1.0 - abs(noise(wq * 1.15 - vec3(0.0, a * 2.2, 0.0)) * 2.0 - 1.0);
+    float b2 = 1.0 - abs(noise(wq * 2.9 + vec3(a, -a * 3.6, 0.0)) * 2.0 - 1.0);
+    float bil = b1 * 0.65 + b2 * 0.35;
     for (int i = 0; i < 3; i++) {
       vec3 c; float r; lobe(i, a, c, r);
       float dl = length((q - c) / vec3(1.0, 0.82, 1.0));
-      float edge = dl - r + (n - 0.5) * r * 1.3 + (n2 - 0.5) * 1.0 * uScale;
-      float d = smoothstep(0.3 * uScale, -0.5 * uScale, edge);
+      float edge = dl - r + (n - 0.5) * r * 1.2 + (n2 - 0.5) * 0.8 * uScale - (bil - 0.55) * 1.3 * uScale;
+      float d = smoothstep(0.12 * uScale, -0.28 * uScale, edge);
       dens = max(dens, d);
       float core = clamp(1.0 - dl / max(r, 0.01), 0.0, 1.0);
       // only the interior burns: the turbulent outer shell is cooler and turns to black smoke as the burst ages
       float interior = smoothstep((0.1 + a * 0.9) * uScale, (-0.9 - a * 0.6) * uScale, edge);
-      temp = max(temp, d * interior * (pow(core, 0.55) * 1.2 + (n - 0.45) * 0.7) * heat * (i == 0 ? 1.0 : 0.85));
+      // high-contrast burn: hot pockets inside the billows, dark folds between them
+      temp = max(temp, d * interior * (pow(core, 0.55) * 1.15 + (n - 0.45) * 0.8 + (bil - 0.5) * 0.55) * heat * (i == 0 ? 1.0 : 0.85));
     }
-    if (colMask > 0.0) dens = max(dens, smoothstep(0.4, -0.9, col / uScale + (n - 0.5) * 2.8) * colMask * 0.9);
+    if (colMask > 0.0) dens = max(dens, smoothstep(0.2, -0.5, col / uScale + (n - 0.5) * 2.8 - (bil - 0.55) * 1.4) * colMask * 0.9);
     // the cap carries some heat early (it's the top of the fireball rolling over)
-    float capD = smoothstep(0.4, -0.8, cap / uScale + (n - 0.5) * 2.4);
+    float capD = smoothstep(0.2, -0.45, cap / uScale + (n - 0.5) * 2.4 - (bil - 0.55) * 1.4);
     dens = max(dens, capD * 0.95);
     temp = max(temp, capD * heat * 0.35 * (1.0 - smoothstep(0.6, 1.4, a)));
     dens *= step(0.0, q.y) * smoothstep(0.0, 0.6, q.y + 0.3);
@@ -93,14 +98,14 @@ const glsl = /* glsl */ `
   }
 
   vec3 fireColor(float t) {
-    vec3 deep = vec3(0.55, 0.05, 0.0) * 1.8;
-    vec3 orange = vec3(1.0, 0.32, 0.04) * 4.5;
-    vec3 yellow = vec3(1.0, 0.72, 0.28) * 7.0;
-    vec3 white = vec3(1.0, 0.93, 0.8) * 11.0;
-    vec3 c = mix(deep, orange, smoothstep(0.32, 0.55, t));
-    c = mix(c, yellow, smoothstep(0.55, 0.78, t));
-    c = mix(c, white, smoothstep(0.8, 1.0, t));
-    return c * smoothstep(0.22, 0.36, t);
+    vec3 deep = vec3(0.42, 0.03, 0.0) * 1.3;
+    vec3 orange = vec3(1.0, 0.28, 0.03) * 4.2;
+    vec3 yellow = vec3(1.0, 0.66, 0.22) * 7.5;
+    vec3 white = vec3(1.0, 0.92, 0.78) * 12.0;
+    vec3 c = mix(deep, orange, smoothstep(0.34, 0.56, t));
+    c = mix(c, yellow, smoothstep(0.58, 0.8, t));
+    c = mix(c, white, smoothstep(0.84, 1.0, t));
+    return c * smoothstep(0.26, 0.4, t);
   }
 
   void main() {
@@ -120,20 +125,21 @@ const glsl = /* glsl */ `
     float baseStep = len / steps;
     float T = 1.0;
     vec3 col = vec3(0.0);
-    float t = 0.0;
+    // per-pixel jitter of the first step: sharp density edges otherwise show as stacked slices
+    float t = baseStep * fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
     float a = uAge;
     float heat = exp(-a * 0.95) * uHeat;
     vec3 c0; float r0; lobe(0, a, c0, r0);
     vec3 fireLight = vec3(1.0, 0.36, 0.07) * 2.2 * heat;   // light emitted by the hot core onto the smoke
     vec3 ambient = vec3(0.05, 0.06, 0.08);                  // floodlit night sky, from above
-    for (int i = 0; i < 64; i++) {
+    for (int i = 0; i < 72; i++) {
       if (float(i) >= steps || t >= len || T < 0.02) break;
       vec3 q = (ro + rd * tn) * S + off + rd * t;
       float temp, coarse;
       float dens = field(q, a, temp, coarse);
       if (coarse > 2.2 * uScale) { t += max(baseStep, coarse * 0.6); continue; }
       if (dens < 0.005) { t += baseStep; continue; }
-      float sigma = dens * mix(4.2, 2.2, smoothstep(0.3, 0.75, temp)) / uScale;
+      float sigma = dens * mix(6.0, 2.6, smoothstep(0.3, 0.75, temp)) / uScale;
       float alpha = 1.0 - exp(-sigma * baseStep);
       // self-shadowing: how much smoke lies between this point and the hot core (2 cheap taps)
       vec3 toCore = c0 - q;
@@ -145,7 +151,7 @@ const glsl = /* glsl */ `
       float lit = exp(-sh * 1.6) / (1.0 + dc * dc * 0.02 / (uScale * uScale));
       // top-lit by the night ambient (higher = more sky)
       float sky = smoothstep(0.0, 14.0 * uScale, q.y) * 0.7 + 0.3;
-      vec3 soot = vec3(0.010, 0.009, 0.008);
+      vec3 soot = vec3(0.006, 0.0055, 0.005);
       vec3 smoke = soot + fireLight * lit * (1.0 - smoothstep(0.35, 0.7, temp)) + ambient * sky * 0.6;
       vec3 c = fireColor(temp) + smoke;
       col += T * alpha * c;
